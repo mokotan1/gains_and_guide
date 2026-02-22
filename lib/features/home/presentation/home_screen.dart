@@ -110,7 +110,35 @@ class _HomeScreenState extends State<HomeScreen> {
   // 세트 체크/해제
   void _toggleSetStatus(int exerciseIndex, int setIndex) {
     setState(() {
-      exercises[exerciseIndex].setStatus[setIndex] = !exercises[exerciseIndex].setStatus[setIndex];
+      final isDone = !exercises[exerciseIndex].setStatus[setIndex];
+      exercises[exerciseIndex].setStatus[setIndex] = isDone;
+
+      // 세트를 완료로 체크했을 때만 타이머 자동 시작
+      if (isDone) {
+        _startTimerDirectly();
+      }
+    });
+  }
+
+  // 타이머를 즉시 시작하는 내부 메서드
+  void _startTimerDirectly() {
+    _timer?.cancel();
+    setState(() {
+      _isResting = true;
+      _currentTimerSeconds = _selectedRestTime;
+    });
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_currentTimerSeconds <= 0) {
+        timer.cancel();
+        setState(() {
+          _isResting = false;
+          _currentTimerSeconds = _selectedRestTime;
+        });
+      } else {
+        setState(() {
+          _currentTimerSeconds--;
+        });
+      }
     });
   }
 
