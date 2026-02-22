@@ -34,6 +34,7 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
       "${e.name}: ${e.weight}kg x ${e.sets}세트 (RPE: ${e.setRpe.join(',')})"
     ).join('\n');
 
+    try {
       // ⚠️ 클라우드 서버 주소 반영
       final response = await http.post(
         Uri.parse('https://gains-and-guide.onrender.com/chat'),
