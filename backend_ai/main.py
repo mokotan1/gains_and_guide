@@ -9,7 +9,7 @@ load_dotenv()
 
 app = FastAPI()
 
-# GOOGLE_API_KEY 설정 (Render 대시보드의 Environment Variable 이름을 참조해야 함)
+# GOOGLE_API_KEY 설정 (환경 변수 이름인 "GOOGLE_API_KEY"를 참조해야 합니다)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
@@ -21,7 +21,7 @@ try:
 except FileNotFoundError:
     SYSTEM_PROMPT = "당신은 전문 헬스 트레이너입니다."
 
-# AI 모델 설정 (Gemini 1.5 Flash로 업그레이드)
+# AI 모델 설정 (Gemini 1.5 Flash)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 class ChatRequest(BaseModel):
