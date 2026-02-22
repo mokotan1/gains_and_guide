@@ -24,4 +24,18 @@ class Routine {
     'description': description,
     'created_at': createdAt,
   };
+
+  Routine copyWith({
+    int? id,
+    String? name,
+    String? description,
+    String? createdAt,
+  }) {
+    return Routine(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 }

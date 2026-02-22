@@ -1,7 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/routine.dart';
-import '../../core/database/database_helper.dart';
+import '../../../core/database/database_helper.dart';
 
 // Provider (DI)
 final routineRepositoryProvider = Provider<RoutineRepository>((ref) {
