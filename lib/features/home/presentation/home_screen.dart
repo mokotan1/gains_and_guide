@@ -358,22 +358,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // 2. 서버 연동 및 자동 추가 로직 (시뮬레이션)
     // 실제 운영 시에는 http.post를 통해 backend_ai와 통신하여 JSON을 받아옵니다.
     Future.delayed(const Duration(seconds: 2), () {
-      final aiRecommendation = Exercise(
-        id: 'ai_${DateTime.now().millisecondsSinceEpoch}',
-        name: '[AI 추천] 사이드 레터럴 레이즈', 
-        sets: 3,
-        reps: 15,
-        weight: 5,
-      );
+      final recommendations = [
+        Exercise(
+          id: 'ai_1_${DateTime.now().millisecondsSinceEpoch}',
+          name: '사이드 레터럴 레이즈', 
+          sets: 3, reps: 15, weight: 5,
+        ),
+        Exercise(
+          id: 'ai_2_${DateTime.now().millisecondsSinceEpoch}',
+          name: '삼두 케이블 푸쉬다운', 
+          sets: 3, reps: 12, weight: 15,
+        ),
+      ];
 
-      // 내일 루틴에 자동으로 꽂아넣는 로직을 호출할 수 있습니다.
-      // 여기서는 현재 상태에 바로 추가하여 시각적으로 보여줍니다.
-      ref.read(workoutProvider.notifier).addExercise(aiRecommendation);
+      // AI 추천 루틴 섹션에 통째로 주입
+      ref.read(workoutProvider.notifier).setAiRecommendations(recommendations);
       
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('내일의 보조 운동으로 "${aiRecommendation.name}"이 배정되었습니다!'),
-          backgroundColor: Colors.green,
+        const SnackBar(
+          content: Text('내일의 맞춤형 보조 루틴이 배정되었습니다!'),
+          backgroundColor: Colors.purple,
         )
       );
     });
@@ -456,16 +460,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildExerciseList(List<Exercise> exercises) {
+    final aiExercises = ref.watch(workoutProvider.notifier).aiRecommendedExercises;
+
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
       child: Column(
         children: [
+          // AI 추천 섹션 (데이터가 있을 때만 표시)
+          if (aiExercises.isNotEmpty) ...[
+            _buildAiSectionHeader(),
+            ...aiExercises.asMap().entries.map((entry) => _buildExerciseTile(entry.key, entry.value, aiExercises, isAi: true)),
+            const Divider(thickness: 2, color: Color(0xFFF3F4F6)),
+          ],
+
+          // 일반 운동 목록 헤더
           Padding(
             padding: const EdgeInsets.all(20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('운동 목록', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('오늘의 메인 루틴', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 Row(
                   children: [
                     IconButton(
@@ -486,26 +500,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
             itemCount: exercises.length,
             itemBuilder: (context, exIndex) {
-              final ex = exercises[exIndex];
-              final isCardio = ex.name.contains('런닝머신') || ex.name.contains('사이클');
-
-              return ExpansionTile(
-                initiallyExpanded: true,
-                title: Text(ex.name, style: TextStyle(fontWeight: FontWeight.bold, decoration: ex.isAllCompleted ? TextDecoration.lineThrough : null)),
-                subtitle: Text(isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg'),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    child: isCardio 
-                      ? _buildCardioCheck(exIndex, ex)
-                      : _buildWeightTrainingCheck(exIndex, ex, exercises),
-                  ),
-                ],
-              );
+              return _buildExerciseTile(exIndex, exercises[exIndex], exercises);
             },
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAiSectionHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.purple[50],
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.psychology, color: Colors.purple),
+          SizedBox(width: 8),
+          Text('🤖 AI 분석 추천 보조 루틴', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold, fontSize: 16)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExerciseTile(int exIndex, Exercise ex, List<Exercise> list, {bool isAi = false}) {
+    final isCardio = ex.name.contains('런닝머신') || ex.name.contains('사이클');
+    return ExpansionTile(
+      initiallyExpanded: true,
+      title: Text(ex.name, style: TextStyle(fontWeight: FontWeight.bold, decoration: ex.isAllCompleted ? TextDecoration.lineThrough : null)),
+      subtitle: Text(isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg'),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: isCardio 
+            ? _buildCardioCheck(exIndex, ex)
+            : _buildWeightTrainingCheck(exIndex, ex, list),
+        ),
+      ],
     );
   }
 

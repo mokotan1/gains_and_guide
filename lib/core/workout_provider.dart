@@ -7,6 +7,16 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     _loadRoutineByDay();
   }
 
+  // AI 추천 보조 운동 목록을 별도로 관리
+  List<Exercise> _aiRecommendedExercises = [];
+  List<Exercise> get aiRecommendedExercises => _aiRecommendedExercises;
+
+  void setAiRecommendations(List<Exercise> recommendations) {
+    _aiRecommendedExercises = recommendations;
+    // 상태를 새로고침하기 위해 현재 상태를 재할당 (UI 업데이트 유도)
+    state = [...state];
+  }
+
   // 현재 요일에 맞는 루틴 자동 로드 (기본 예시)
   void _loadRoutineByDay() {
     final now = DateTime.now();
