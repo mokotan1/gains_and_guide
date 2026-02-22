@@ -1,16 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cupertino_icons/cupertino_icons.dart';
 
-// 임시 데이터 모델 (나중에 DB와 연동)
+// 운동 모델
 class Exercise {
   final String id;
   final String name;
   final int sets;
   final int reps;
   final double weight;
-  bool completed;
+  final List<bool> setStatus; // 각 세트별 완료 여부 체크
 
   Exercise({
     required this.id,
@@ -18,8 +16,28 @@ class Exercise {
     required this.sets,
     required this.reps,
     required this.weight,
-    this.completed = false,
-  });
+    List<bool>? setStatus,
+  }) : setStatus = setStatus ?? List.filled(sets, false);
+
+  Exercise copyWith({
+    String? id,
+    String? name,
+    int? sets,
+    int? reps,
+    double? weight,
+    List<bool>? setStatus,
+  }) {
+    return Exercise(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      sets: sets ?? this.sets,
+      reps: reps ?? this.reps,
+      weight: weight ?? this.weight,
+      setStatus: setStatus ?? List.from(this.setStatus),
+    );
+  }
+
+  bool get isAllCompleted => setStatus.every((status) => status);
 }
 
 class HomeScreen extends StatefulWidget {
@@ -31,15 +49,15 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   // 샘플 데이터
-  final List<Exercise> exercises = [
+  List<Exercise> exercises = [
     Exercise(id: '1', name: '벤치프레스', sets: 3, reps: 10, weight: 60),
     Exercise(id: '2', name: '스쿼트', sets: 4, reps: 8, weight: 80),
     Exercise(id: '3', name: '데드리프트', sets: 3, reps: 6, weight: 100),
-    Exercise(id: '4', name: '숄더프레스', sets: 3, reps: 12, weight: 30, completed: true),
   ];
 
-  // 타이머 상태
-  int _restTime = 90; // 90초 (1분 30초)
+  // 타이머 관련
+  int _selectedRestTime = 120; // 기본 2분 (120초)
+  int _currentTimerSeconds = 120;
   bool _isResting = false;
   Timer? _timer;
 
@@ -49,33 +67,97 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  void _startRest() {
+  // 휴식 시간 설정
+  void _setRestTime(int seconds) {
     setState(() {
-      _isResting = true;
-      _restTime = 90;
-    });
-
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_restTime <= 0) {
-        timer.cancel();
-        setState(() {
-          _isResting = false;
-          _restTime = 90;
-        });
-      } else {
-        setState(() {
-          _restTime--;
-        });
+      _selectedRestTime = seconds;
+      if (!_isResting) {
+        _currentTimerSeconds = seconds;
       }
     });
   }
 
-  void _toggleExercise(String id) {
+  // 타이머 시작/종료
+  void _toggleTimer() {
+    if (_isResting) {
+      _timer?.cancel();
+      setState(() {
+        _isResting = false;
+        _currentTimerSeconds = _selectedRestTime;
+      });
+    } else {
+      setState(() {
+        _isResting = true;
+        _currentTimerSeconds = _selectedRestTime;
+      });
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (_currentTimerSeconds <= 0) {
+          timer.cancel();
+          setState(() {
+            _isResting = false;
+            _currentTimerSeconds = _selectedRestTime;
+          });
+          // 휴식 종료 알림 등을 여기에 추가할 수 있습니다.
+        } else {
+          setState(() {
+            _currentTimerSeconds--;
+          });
+        }
+      });
+    }
+  }
+
+  // 세트 체크/해제
+  void _toggleSetStatus(int exerciseIndex, int setIndex) {
     setState(() {
-      final exercise = exercises.firstWhere((e) => e.id == id);
-      exercise.completed = !exercise.completed;
+      exercises[exerciseIndex].setStatus[setIndex] = !exercises[exerciseIndex].setStatus[setIndex];
     });
+  }
+
+  // 운동 추가 다이얼로그
+  void _showAddExerciseDialog() {
+    final nameController = TextEditingController();
+    final setsController = TextEditingController(text: '3');
+    final repsController = TextEditingController(text: '10');
+    final weightController = TextEditingController(text: '60');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('새 운동 추가'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: '운동 이름 (예: 스쿼트)')),
+              TextField(controller: setsController, decoration: const InputDecoration(labelText: '세트 수'), keyboardType: TextInputType.number),
+              TextField(controller: repsController, decoration: const InputDecoration(labelText: '회수'), keyboardType: TextInputType.number),
+              TextField(controller: weightController, decoration: const InputDecoration(labelText: '무게 (kg)'), keyboardType: TextInputType.number),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isNotEmpty) {
+                setState(() {
+                  exercises.add(Exercise(
+                    id: DateTime.now().toString(),
+                    name: nameController.text,
+                    sets: int.tryParse(setsController.text) ?? 3,
+                    reps: int.tryParse(repsController.text) ?? 10,
+                    weight: double.tryParse(weightController.text) ?? 60.0,
+                  ));
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('추가'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatTime(int seconds) {
@@ -86,34 +168,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final int completedCount = exercises.where((e) => e.completed).length;
-    final int totalCount = exercises.length;
-    final double progressPercent = totalCount == 0 ? 0 : completedCount / totalCount;
+    int totalSets = 0;
+    int completedSets = 0;
+    for (var ex in exercises) {
+      totalSets += ex.sets;
+      completedSets += ex.setStatus.where((s) => s).length;
+    }
+    final double progressPercent = totalSets == 0 ? 0 : completedSets / totalSets;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6), // Tailwind gray-100
+      backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
-        title: const Text(
-          'Gains & Guide',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
+        title: const Text('Gains & Guide', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
-        centerTitle: false,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // 1. Rest Timer Card
             _buildTimerCard(),
             const SizedBox(height: 16),
-
-            // 2. Progress Card
-            _buildProgressCard(completedCount, totalCount, progressPercent),
+            _buildProgressCard(completedSets, totalSets, progressPercent),
             const SizedBox(height: 16),
-
-            // 3. Exercise List
             _buildExerciseList(),
           ],
         ),
@@ -123,141 +200,95 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTimerCard() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.timer, color: Color(0xFF2563EB), size: 28), // Blue-600
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '휴식 시간',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF111827), // Gray-900
-                        ),
-                      ),
-                      Text(
-                        '세트 간 휴식',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                    ],
-                  ),
+                  Text('휴식 타이머', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('세트 간 권장 휴식', style: TextStyle(fontSize: 14, color: Colors.grey)),
                 ],
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    _formatTime(_restTime),
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2563EB), // Blue-600
-                    ),
-                  ),
-                  if (!_isResting)
-                    GestureDetector(
-                      onTap: _startRest,
-                      child: const Padding(
-                        padding: EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          '타이머 시작',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF2563EB),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+              Text(
+                _formatTime(_currentTimerSeconds),
+                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
               ),
             ],
           ),
-          if (_isResting) ...[
-            const SizedBox(height: 16),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: _restTime / 90,
-                backgroundColor: Colors.grey[200],
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
-                minHeight: 8,
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _restTimeButton('2분', 120),
+              _restTimeButton('3분', 180),
+              _restTimeButton('5분', 300),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _toggleTimer,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isResting ? Colors.red[400] : const Color(0xFF2563EB),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
+              child: Text(_isResting ? '타이머 중지' : '타이머 시작', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
             ),
-          ],
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _restTimeButton(String label, int seconds) {
+    bool isSelected = _selectedRestTime == seconds;
+    return InkWell(
+      onTap: () => _setRestTime(seconds),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2563EB) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
   Widget _buildProgressCard(int completed, int total, double percent) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                '오늘의 진행률',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF111827),
-                ),
-              ),
-              Text(
-                '$completed / $total',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
+              const Text('오늘의 세트 달성도', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text('$completed / $total 세트', style: const TextStyle(fontSize: 14, color: Colors.blue)),
             ],
           ),
           const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: percent,
-              backgroundColor: Colors.grey[200],
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF22C55E)), // Green-500
-              minHeight: 12,
-            ),
+          LinearProgressIndicator(
+            value: percent,
+            backgroundColor: Colors.grey[200],
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF22C55E)),
+            minHeight: 10,
           ),
         ],
       ),
@@ -269,102 +300,64 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
       child: Column(
         children: [
-          // Header
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  '오늘의 운동',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    // TODO: 운동 추가
-                  },
-                  icon: const Icon(Icons.add, size: 18, color: Color(0xFF2563EB)),
-                  label: const Text(
-                    '운동 추가',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF2563EB),
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+                const Text('운동 목록', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                IconButton(
+                  onPressed: _showAddExerciseDialog,
+                  icon: const Icon(Icons.add_circle, color: Color(0xFF2563EB), size: 30),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFFE5E7EB)), // Gray-200
-
-          // List Items
-          ListView.separated(
+          const Divider(height: 1),
+          ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: exercises.length,
-            separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF3F4F6)),
-            itemBuilder: (context, index) {
-              final exercise = exercises[index];
-              return InkWell(
-                onTap: () => _toggleExercise(exercise.id),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  child: Row(
-                    children: [
-                      // Checkbox
-                      Icon(
-                        exercise.completed ? Icons.check_circle : Icons.radio_button_unchecked,
-                        color: exercise.completed ? const Color(0xFF22C55E) : Colors.grey[300],
-                        size: 28,
-                      ),
-                      const SizedBox(width: 16),
-                      // Text
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              exercise.name,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: exercise.completed ? Colors.grey[400] : const Color(0xFF111827),
-                                decoration: exercise.completed ? TextDecoration.lineThrough : null,
+            itemBuilder: (context, exIndex) {
+              final ex = exercises[exIndex];
+              return ExpansionTile(
+                initiallyExpanded: true,
+                title: Text(ex.name, style: TextStyle(fontWeight: FontWeight.bold, decoration: ex.isAllCompleted ? TextDecoration.lineThrough : null)),
+                subtitle: Text('${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg'),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: List.generate(ex.sets, (setIndex) {
+                        bool isDone = ex.setStatus[setIndex];
+                        return InkWell(
+                          onTap: () => _toggleSetStatus(exIndex, setIndex),
+                          child: Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: isDone ? const Color(0xFF22C55E) : Colors.white,
+                              border: Border.all(color: isDone ? const Color(0xFF22C55E) : Colors.grey[300]!),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${setIndex + 1}',
+                                style: TextStyle(color: isDone ? Colors.white : Colors.black54, fontWeight: FontWeight.bold),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${exercise.sets} 세트 × ${exercise.reps} 회 • ${exercise.weight.toStringAsFixed(0)}kg',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                          ),
+                        );
+                      }),
+                    ),
                   ),
-                ),
+                ],
               );
             },
           ),
