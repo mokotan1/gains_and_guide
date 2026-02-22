@@ -33,8 +33,26 @@ except FileNotFoundError:
     SYSTEM_PROMPT = "당신은 전문 헬스 트레이너입니다."
     logger.warning("⚠️ persona.txt를 찾지 못해 기본 페르소나를 사용합니다.")
 
-# AI 모델 설정 (Gemini 1.5 Flash)
-model = genai.GenerativeModel('gemini-1.5-flash')
+# AI 모델 설정 (Gemini 1.5 Flash + 안전 설정 완화)
+generation_config = {
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "top_k": 64,
+    "max_output_tokens": 1024,
+}
+
+safety_settings = [
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+]
+
+model = genai.GenerativeModel(
+    model_name='gemini-1.5-flash',
+    generation_config=generation_config,
+    safety_settings=safety_settings
+)
 
 class ChatRequest(BaseModel):
     user_id: str
