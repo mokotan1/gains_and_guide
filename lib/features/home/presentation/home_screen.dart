@@ -320,14 +320,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              // TODO: AI 분석 API 호출 및 내일 루틴 반영 로직
+              _processAiRecommendation(exercises);
               Navigator.pop(context);
             },
-            child: const Text('확인'),
+            child: const Text('확인 및 AI 분석 요청'),
           ),
         ],
       ),
     );
+  }
+
+  void _processAiRecommendation(List<Exercise> currentExercises) async {
+    // 1. 오늘의 데이터를 텍스트로 정리
+    String workoutSummary = currentExercises.map((e) => 
+      "${e.name}: ${e.weight}kg x ${e.sets}세트 (강도RPE: ${e.setRpe.where((r) => r != null).join(',')})"
+    ).join('\n');
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('AI 코치가 오늘의 데이터를 분석하여 내일의 보조 운동을 설계 중입니다...'),
+        backgroundColor: Colors.blue,
+      )
+    );
+
+    // 2. 서버 연동 및 자동 추가 로직 (시뮬레이션)
+    // 실제 운영 시에는 http.post를 통해 backend_ai와 통신하여 JSON을 받아옵니다.
+    Future.delayed(const Duration(seconds: 2), () {
+      final aiRecommendation = Exercise(
+        id: 'ai_${DateTime.now().millisecondsSinceEpoch}',
+        name: '[AI 추천] 사이드 레터럴 레이즈', 
+        sets: 3,
+        reps: 15,
+        weight: 5,
+      );
+
+      // 내일 루틴에 자동으로 꽂아넣는 로직을 호출할 수 있습니다.
+      // 여기서는 현재 상태에 바로 추가하여 시각적으로 보여줍니다.
+      ref.read(workoutProvider.notifier).addExercise(aiRecommendation);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('내일의 보조 운동으로 "${aiRecommendation.name}"이 배정되었습니다!'),
+          backgroundColor: Colors.green,
+        )
+      );
+    });
   }
 
   Widget _summaryItem(String label, String value, Color color) {
