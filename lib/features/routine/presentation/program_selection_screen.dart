@@ -41,11 +41,13 @@ class ProgramSelectionScreen extends ConsumerWidget {
             Exercise(id: 's1', name: '스쿼트', sets: 5, reps: 5, weight: 60),
             Exercise(id: 's4', name: '오버헤드 프레스', sets: 5, reps: 5, weight: 30),
             Exercise(id: 's5', name: '데드리프트', sets: 1, reps: 5, weight: 80),
+            Exercise(id: 's6', name: '실내 사이클', sets: 1, reps: 20, weight: 0), // 유산소 추가
           ],
           5: [ // 금
             Exercise(id: 's1', name: '스쿼트', sets: 5, reps: 5, weight: 62.5),
             Exercise(id: 's2', name: '벤치프레스', sets: 5, reps: 5, weight: 42.5),
             Exercise(id: 's3', name: '바벨로우', sets: 5, reps: 5, weight: 42.5),
+            Exercise(id: 's7', name: '런닝머신', sets: 1, reps: 15, weight: 0), // 유산소 추가
           ],
         },
         icon: Icons.fitness_center,
@@ -65,6 +67,22 @@ class ProgramSelectionScreen extends ConsumerWidget {
         },
         icon: Icons.repeat,
         color: Colors.purple,
+      ),
+      WeeklyProgram(
+        title: '다이어트 유산소 루틴 (매일)',
+        level: '체지방 연소',
+        description: '매일 실내 사이클과 런닝머신을 병행하여 체지방을 효과적으로 태웁니다.',
+        weeklyExercises: {
+          1: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          2: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          3: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          4: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          5: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          6: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          7: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+        },
+        icon: Icons.directions_run,
+        color: Colors.orange,
       ),
     ];
 
