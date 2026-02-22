@@ -9,7 +9,7 @@ load_dotenv()
 
 app = FastAPI()
 
-# GOOGLE_API_KEY 설정
+# GOOGLE_API_KEY 설정 (Render 대시보드의 Environment Variable 이름을 참조해야 함)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
