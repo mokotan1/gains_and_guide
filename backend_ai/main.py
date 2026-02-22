@@ -21,8 +21,8 @@ try:
 except FileNotFoundError:
     SYSTEM_PROMPT = "당신은 전문 헬스 트레이너입니다."
 
-# AI 모델 설정 (Gemini Pro)
-model = genai.GenerativeModel('gemini-pro')
+# AI 모델 설정 (Gemini 1.5 Flash로 업그레이드)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 class ChatRequest(BaseModel):
     user_id: str
