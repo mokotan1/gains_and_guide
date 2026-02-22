@@ -86,10 +86,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  void _startTimerDirectly() {
+  bool _isCardioTimer = false;
+
+  void _startTimerDirectly({bool isCardio = false}) {
     _timer?.cancel();
     setState(() {
       _isResting = true;
+      _isCardioTimer = isCardio;
       _currentTimerSeconds = _selectedRestTime;
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -97,6 +100,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         timer.cancel();
         setState(() {
           _isResting = false;
+          _isCardioTimer = false;
           _currentTimerSeconds = _selectedRestTime;
         });
       } else {
@@ -109,7 +113,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (exercises[exerciseIndex].setStatus[setIndex]) {
       ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, null);
     } else {
-      _showRpeDialog(exerciseIndex, setIndex, exercises);
+      // 유산소 타이머가 가동 중이면 근력 운동 자동 휴식 타이머 시작 차단
+      if (_isResting && _isCardioTimer) {
+        ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, 5);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('유산소 중에는 자동 휴식 타이머가 작동하지 않습니다.'))
+        );
+      } else {
+        _showRpeDialog(exerciseIndex, setIndex, exercises);
+      }
     }
   }
 
@@ -130,7 +142,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 return InkWell(
                   onTap: () {
                     ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, rpe);
-                    _startTimerDirectly();
+                    _startTimerDirectly(isCardio: false);
                     Navigator.pop(context);
                   },
                   child: Container(
@@ -529,9 +541,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               bool newStatus = !isDone;
               ref.read(workoutProvider.notifier).toggleSet(exIndex, 0, newStatus ? 5 : null);
               if (newStatus) {
-                // 유산소 전용 타이머 시작 (휴식 타이머가 아닌 수행 타이머로 활용)
+                // 유산소 전용 타이머 시작 (isCardio: true 전달)
                 _selectedRestTime = _selectedCardioMinutes * 60;
-                _startTimerDirectly();
+                _startTimerDirectly(isCardio: true);
               } else {
                 _timer?.cancel();
                 _isResting = false;
