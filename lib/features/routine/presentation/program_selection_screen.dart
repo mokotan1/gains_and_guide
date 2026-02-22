@@ -28,26 +28,24 @@ class ProgramSelectionScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final List<WeeklyProgram> programs = [
       WeeklyProgram(
-        title: 'Stronglifts 5x5 (월수금)',
+        title: 'Stronglifts 5x5 (Master Custom)',
         level: '초중급 스트렝스',
-        description: '월, 수, 금 주 3회 훈련합니다. 나머지 요일은 자동으로 휴식일로 지정됩니다.',
+        description: '주인님의 현재 중량(스쿼트 100kg+, 데드리프트 145kg+)에 맞춘 커스텀 5x5 루틴입니다.',
         weeklyExercises: {
-          1: [ // 월
-            Exercise(id: 's1', name: '스쿼트', sets: 5, reps: 5, weight: 60),
-            Exercise(id: 's2', name: '벤치프레스', sets: 5, reps: 5, weight: 40),
-            Exercise(id: 's3', name: '바벨로우', sets: 5, reps: 5, weight: 40),
+          1: [ // 월 (Workout A)
+            Exercise(id: 's1_a', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
+            Exercise(id: 's2_a', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 80),
+            Exercise(id: 's3_a', name: '펜들레이 로우', sets: 5, reps: 5, weight: 80),
           ],
-          3: [ // 수
-            Exercise(id: 's1', name: '스쿼트', sets: 5, reps: 5, weight: 60),
-            Exercise(id: 's4', name: '오버헤드 프레스', sets: 5, reps: 5, weight: 30),
-            Exercise(id: 's5', name: '데드리프트', sets: 1, reps: 5, weight: 80),
-            Exercise(id: 's6', name: '실내 사이클', sets: 1, reps: 20, weight: 0), // 유산소 추가
+          3: [ // 수 (Workout B)
+            Exercise(id: 's1_b', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
+            Exercise(id: 's4_b', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 55),
+            Exercise(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 145),
           ],
-          5: [ // 금
-            Exercise(id: 's1', name: '스쿼트', sets: 5, reps: 5, weight: 62.5),
-            Exercise(id: 's2', name: '벤치프레스', sets: 5, reps: 5, weight: 42.5),
-            Exercise(id: 's3', name: '바벨로우', sets: 5, reps: 5, weight: 42.5),
-            Exercise(id: 's7', name: '런닝머신', sets: 1, reps: 15, weight: 0), // 유산소 추가
+          5: [ // 금 (Workout A 다시)
+            Exercise(id: 's1_c', name: '백 스쿼트', sets: 5, reps: 5, weight: 102.5),
+            Exercise(id: 's2_c', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 82.5),
+            Exercise(id: 's3_c', name: '펜들레이 로우', sets: 5, reps: 5, weight: 82.5),
           ],
         },
         icon: Icons.fitness_center,
