@@ -475,21 +475,71 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             itemCount: exercises.length,
             itemBuilder: (context, exIndex) {
               final ex = exercises[exIndex];
+              final isCardio = ex.name.contains('런닝머신') || ex.name.contains('사이클');
+
               return ExpansionTile(
                 initiallyExpanded: true,
                 title: Text(ex.name, style: TextStyle(fontWeight: FontWeight.bold, decoration: ex.isAllCompleted ? TextDecoration.lineThrough : null)),
-                subtitle: Text('${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg'),
+                subtitle: Text(isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg'),
                 children: [
-                  Padding(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10), child: Wrap(spacing: 10, runSpacing: 10, children: List.generate(ex.sets, (sIdx) {
-                    bool isDone = ex.setStatus[sIdx];
-                    return InkWell(onTap: () => _toggleSetStatus(exIndex, sIdx, exercises), child: Container(width: 50, height: 50, decoration: BoxDecoration(color: isDone ? const Color(0xFF22C55E) : Colors.white, border: Border.all(color: isDone ? const Color(0xFF22C55E) : Colors.grey[300]!), shape: BoxShape.circle), child: Center(child: Text('${sIdx + 1}', style: TextStyle(color: isDone ? Colors.white : Colors.black54, fontWeight: FontWeight.bold)))));
-                  }))),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    child: isCardio 
+                      ? _buildCardioCheck(exIndex, ex)
+                      : _buildWeightTrainingCheck(exIndex, ex, exercises),
+                  ),
                 ],
               );
             },
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCardioCheck(int exIndex, Exercise ex) {
+    bool isDone = ex.setStatus[0];
+    return InkWell(
+      onTap: () {
+        ref.read(workoutProvider.notifier).toggleSet(exIndex, 0, isDone ? null : 5); // 유산소는 기본 RPE 5 할당
+        if (!isDone) _startTimerDirectly();
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isDone ? const Color(0xFF22C55E) : Colors.white,
+          border: Border.all(color: isDone ? const Color(0xFF22C55E) : Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Text(
+            isDone ? '유산소 완료! 🎉' : '${ex.reps}분 운동 시작하기',
+            style: TextStyle(color: isDone ? Colors.white : Colors.black87, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeightTrainingCheck(int exIndex, Exercise ex, List<Exercise> exercises) {
+    return Wrap(
+      spacing: 10, runSpacing: 10,
+      children: List.generate(ex.sets, (sIdx) {
+        bool isDone = ex.setStatus[sIdx];
+        return InkWell(
+          onTap: () => _toggleSetStatus(exIndex, sIdx, exercises),
+          child: Container(
+            width: 50, height: 50,
+            decoration: BoxDecoration(
+              color: isDone ? const Color(0xFF22C55E) : Colors.white,
+              border: Border.all(color: isDone ? const Color(0xFF22C55E) : Colors.grey[300]!),
+              shape: BoxShape.circle,
+            ),
+            child: Center(child: Text('${sIdx + 1}', style: TextStyle(color: isDone ? Colors.white : Colors.black54, fontWeight: FontWeight.bold))),
+          ),
+        );
+      }),
     );
   }
 }
