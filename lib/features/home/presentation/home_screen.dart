@@ -243,6 +243,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       completedSets += ex.setStatus.where((s) => s).length;
     }
     final double percent = totalSets == 0 ? 0 : completedSets / totalSets;
+    final bool isAllFinished = percent >= 1.0 && exercises.isNotEmpty;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -258,10 +259,86 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _buildTimerCard(),
             const SizedBox(height: 16),
             _buildProgressCard(completedSets, totalSets, percent),
+            if (isAllFinished) ...[
+              const SizedBox(height: 16),
+              _buildFinishButton(exercises),
+            ],
             const SizedBox(height: 16),
             _buildExerciseList(exercises),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFinishButton(List<Exercise> exercises) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () => _showSummaryDialog(exercises),
+        icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+        label: const Text('오늘의 훈련 종료 및 정산', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF22C55E),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  void _showSummaryDialog(List<Exercise> exercises) {
+    double totalVolume = 0;
+    int totalCals = 0;
+    
+    for (var ex in exercises) {
+      // 볼륨: 무게 * 횟수 * 완료된 세트 수
+      int completedSetsCount = ex.setStatus.where((s) => s).length;
+      totalVolume += ex.weight * ex.reps * completedSetsCount;
+      
+      // 칼로리 간이 계산 (근력: 세트당 5-10kcal, 유산소: 분당 7-10kcal)
+      if (ex.name.contains('사이클') || ex.name.contains('런닝머신')) {
+        totalCals += (ex.reps * 8).toInt(); // reps를 분 단위로 활용
+      } else {
+        totalCals += (completedSetsCount * 7);
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('🏋️ 오늘의 훈련 리포트', textAlign: TextAlign.center),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _summaryItem('총 훈련 볼륨', '${totalVolume.toStringAsFixed(0)} kg', Colors.blue),
+            _summaryItem('예상 소모 칼로리', '$totalCals kcal', Colors.orange),
+            const Divider(height: 30),
+            const Text('AI 코치가 내일의 보조 운동을\n분석하여 루틴에 추가합니다...', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              // TODO: AI 분석 API 호출 및 내일 루틴 반영 로직
+              Navigator.pop(context);
+            },
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryItem(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+        ],
       ),
     );
   }
