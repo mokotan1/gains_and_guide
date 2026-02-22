@@ -147,6 +147,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  void _showCardioSelectionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('유산소 선택'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.directions_bike, color: Colors.orange),
+              title: const Text('실내 사이클'),
+              onTap: () {
+                _addCardio('실내 사이클');
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.directions_run, color: Colors.orange),
+              title: const Text('런닝머신'),
+              onTap: () {
+                _addCardio('런닝머신');
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addCardio(String name) {
+    ref.read(workoutProvider.notifier).addExercise(Exercise(
+      id: DateTime.now().toString(),
+      name: name,
+      sets: 1,
+      reps: 30, // 기본 30분
+      weight: 0,
+    ));
+  }
+
   void _showAddExerciseDialog() {
     final nameController = TextEditingController();
     final setsController = TextEditingController(text: '3');
@@ -294,7 +334,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
       child: Column(
         children: [
-          Padding(padding: const EdgeInsets.all(20), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('운동 목록', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), IconButton(onPressed: _showAddExerciseDialog, icon: const Icon(Icons.add_circle, color: Color(0xFF2563EB), size: 30))])),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('운동 목록', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: _showCardioSelectionDialog,
+                      icon: const Icon(Icons.directions_run, color: Color(0xFFF59E0B), size: 30),
+                    ),
+                    IconButton(
+                      onPressed: _showAddExerciseDialog,
+                      icon: const Icon(Icons.add_circle, color: Color(0xFF2563EB), size: 30),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
           const Divider(height: 1),
           ListView.builder(
             shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
