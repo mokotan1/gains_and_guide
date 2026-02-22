@@ -1,5 +1,5 @@
 # AI 코치 서버 배포용 Dockerfile
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
@@ -10,7 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 소스 코드 복사
 COPY . .
 
-# 포트 개방
+# 포트 설정 (Render 환경 대응)
+ENV PORT=8000
 EXPOSE 8000
 
 # 서버 실행
