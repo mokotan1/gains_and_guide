@@ -497,28 +497,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  int _selectedCardioMinutes = 30; // 유산소 기본 30분
+
   Widget _buildCardioCheck(int exIndex, Exercise ex) {
     bool isDone = ex.setStatus[0];
-    return InkWell(
-      onTap: () {
-        ref.read(workoutProvider.notifier).toggleSet(exIndex, 0, isDone ? null : 5); // 유산소는 기본 RPE 5 할당
-        if (!isDone) _startTimerDirectly();
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isDone ? const Color(0xFF22C55E) : Colors.white,
-          border: Border.all(color: isDone ? const Color(0xFF22C55E) : Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Center(
-          child: Text(
-            isDone ? '유산소 완료! 🎉' : '${ex.reps}분 운동 시작하기',
-            style: TextStyle(color: isDone ? Colors.white : Colors.black87, fontWeight: FontWeight.bold),
+    return Column(
+      children: [
+        if (!isDone)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('목표 시간: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              DropdownButton<int>(
+                value: _selectedCardioMinutes,
+                items: [15, 30, 45, 60].map((int value) {
+                  return DropdownMenuItem<int>(
+                    value: value,
+                    child: Text('$value분'),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  setState(() => _selectedCardioMinutes = val!);
+                },
+              ),
+            ],
+          ),
+        const SizedBox(height: 10),
+        InkWell(
+          onTap: () {
+            setState(() {
+              bool newStatus = !isDone;
+              ref.read(workoutProvider.notifier).toggleSet(exIndex, 0, newStatus ? 5 : null);
+              if (newStatus) {
+                // 유산소 전용 타이머 시작 (휴식 타이머가 아닌 수행 타이머로 활용)
+                _selectedRestTime = _selectedCardioMinutes * 60;
+                _startTimerDirectly();
+              } else {
+                _timer?.cancel();
+                _isResting = false;
+              }
+            });
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: isDone ? const Color(0xFFF59E0B) : Colors.white,
+              border: Border.all(color: isDone ? const Color(0xFFF59E0B) : Colors.grey[300]!),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: Text(
+                isDone ? '유산소 수행 중... (클릭 시 취소)' : '$_selectedCardioMinutes분 유산소 시작하기',
+                style: TextStyle(color: isDone ? Colors.white : Colors.black87, fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
