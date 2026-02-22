@@ -210,36 +210,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: const Text('Gains & Guide', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white, elevation: 0,
       ),
-      body: exercises.isEmpty 
-        ? _buildEmptyState()
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                _buildTimerCard(),
-                const SizedBox(height: 16),
-                _buildProgressCard(completedSets, totalSets, percent),
-                const SizedBox(height: 16),
-                _buildExerciseList(exercises),
-              ],
-            ),
-          ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            if (exercises.isEmpty) _buildEmptyStateAdvice(),
+            _buildTimerCard(),
+            const SizedBox(height: 16),
+            _buildProgressCard(completedSets, totalSets, percent),
+            const SizedBox(height: 16),
+            _buildExerciseList(exercises),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildEmptyStateAdvice() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue[100]!),
+      ),
+      child: const Row(
         children: [
-          const Icon(Icons.fitness_center, size: 80, color: Colors.grey),
-          const SizedBox(height: 16),
-          const Text('오늘 진행할 프로그램이 없습니다.', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Text('프로그램 탭에서 루틴을 선택해 보세요!', style: TextStyle(color: Colors.grey)),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => DefaultTabController.of(context).animateTo(1), 
-            child: const Text('프로그램 보러 가기'),
+          Icon(Icons.info_outline, color: Colors.blue),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '오늘은 지정된 루틴이 없는 휴식일입니다. 가벼운 운동을 추가해 보시겠어요?',
+              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w500),
+            ),
           ),
         ],
       ),
