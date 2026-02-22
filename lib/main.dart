@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gains_and_guide/core/theme/app_theme.dart';
 import 'package:gains_and_guide/features/home/presentation/home_screen.dart';
 import 'package:gains_and_guide/features/routine/presentation/program_selection_screen.dart';
+import 'package:gains_and_guide/features/ai_coach/presentation/ai_coach_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,7 +43,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const ProgramSelectionScreen(),
-    const Center(child: Text('AI 코치 준비 중...')), // 나중에 실제 AI 화면으로 교체
+    const AICoachScreen(),
   ];
 
   @override
