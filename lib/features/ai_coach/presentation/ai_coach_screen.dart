@@ -34,10 +34,9 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
       "${e.name}: ${e.weight}kg x ${e.sets}세트 (RPE: ${e.setRpe.join(',')})"
     ).join('\n');
 
-    try {
-      // ⚠️ 안드로이드 에뮬레이터 주소: 10.0.2.2 (실제 기기는 PC IP 입력 필요)
+      // ⚠️ 클라우드 서버 주소 반영
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/chat'),
+        Uri.parse('https://gains-and-guide.onrender.com/chat'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'user_id': 'master_user',
