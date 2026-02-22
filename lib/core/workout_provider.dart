@@ -3,11 +3,30 @@ import '../features/home/presentation/home_screen.dart'; // Exercise 모델 공�
 
 // 운동 목록 상태를 관리하는 Notifier
 class WorkoutNotifier extends StateNotifier<List<Exercise>> {
-  WorkoutNotifier() : super([]);
+  WorkoutNotifier() : super([]) {
+    _loadRoutineByDay();
+  }
 
-  // 새로운 프로그램 적용
-  void applyProgram(List<Exercise> newExercises) {
-    state = newExercises;
+  // 현재 요일에 맞는 루틴 자동 로드 (기본 예시)
+  void _loadRoutineByDay() {
+    final now = DateTime.now();
+    final weekday = now.weekday; // 1: 월, 2: 화, ..., 7: 일
+
+    // TODO: DB나 설정에서 저장된 프로그램 타입을 가져오는 로직 필요
+    // 현재는 예시로 월/수/금은 5x5, 나머지는 휴식/커스텀으로 처리
+  }
+
+  // 특정 프로그램의 요일별 전체 루틴 적용
+  Map<int, List<Exercise>> _currentWeeklyRoutine = {};
+
+  void applyWeeklyProgram(Map<int, List<Exercise>> weeklyRoutine) {
+    _currentWeeklyRoutine = weeklyRoutine;
+    updateRoutineByDay();
+  }
+
+  void updateRoutineByDay() {
+    final weekday = DateTime.now().weekday;
+    state = _currentWeeklyRoutine[weekday] ?? [];
   }
 
   // 세트 상태 업데이트
