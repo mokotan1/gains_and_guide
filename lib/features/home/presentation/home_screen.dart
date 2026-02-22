@@ -8,7 +8,8 @@ class Exercise {
   final int sets;
   final int reps;
   final double weight;
-  final List<bool> setStatus; // 각 세트별 완료 여부 체크
+  final List<bool> setStatus; 
+  final List<int?> setRpe; // 각 세트별 RPE (1~10) 추가
 
   Exercise({
     required this.id,
@@ -17,7 +18,9 @@ class Exercise {
     required this.reps,
     required this.weight,
     List<bool>? setStatus,
-  }) : setStatus = setStatus ?? List.filled(sets, false);
+    List<int?>? setRpe,
+  }) : setStatus = setStatus ?? List.filled(sets, false),
+       setRpe = setRpe ?? List.filled(sets, null);
 
   Exercise copyWith({
     String? id,
@@ -26,6 +29,7 @@ class Exercise {
     int? reps,
     double? weight,
     List<bool>? setStatus,
+    List<int?>? setRpe,
   }) {
     return Exercise(
       id: id ?? this.id,
@@ -34,6 +38,7 @@ class Exercise {
       reps: reps ?? this.reps,
       weight: weight ?? this.weight,
       setStatus: setStatus ?? List.from(this.setStatus),
+      setRpe: setRpe ?? List.from(this.setRpe),
     );
   }
 
@@ -107,17 +112,63 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 세트 체크/해제
+  // 세트 체크/해제 및 RPE 입력
   void _toggleSetStatus(int exerciseIndex, int setIndex) {
-    setState(() {
-      final isDone = !exercises[exerciseIndex].setStatus[setIndex];
-      exercises[exerciseIndex].setStatus[setIndex] = isDone;
+    if (exercises[exerciseIndex].setStatus[setIndex]) {
+      // 이미 완료된 경우 취소만 함
+      setState(() {
+        exercises[exerciseIndex].setStatus[setIndex] = false;
+        exercises[exerciseIndex].setRpe[setIndex] = null;
+      });
+    } else {
+      // 완료 처리 시 RPE 입력 다이얼로그 표시
+      _showRpeDialog(exerciseIndex, setIndex);
+    }
+  }
 
-      // 세트를 완료로 체크했을 때만 타이머 자동 시작
-      if (isDone) {
-        _startTimerDirectly();
-      }
-    });
+  void _showRpeDialog(int exerciseIndex, int setIndex) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${exercises[exerciseIndex].name} ${setIndex + 1}세트 강도'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('이 세트의 난이도는 어땠나요?\n(1: 매우 쉬움 ~ 10: 실패 지점)', textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: List.generate(10, (index) {
+                int rpe = index + 1;
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      exercises[exerciseIndex].setStatus[setIndex] = true;
+                      exercises[exerciseIndex].setRpe[setIndex] = rpe;
+                      _startTimerDirectly();
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50 * rpe] ?? Colors.blue[900],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text('$rpe', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // 타이머를 즉시 시작하는 내부 메서드
