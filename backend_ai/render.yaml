@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: gains-and-guide-ai
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false # Render 대시보드에서 직접 입력해야 함
+      - key: PYTHON_VERSION
+        value: 3.9.0
