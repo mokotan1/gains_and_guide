@@ -1,17 +1,20 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'package:vibration/vibration.dart'; // pubspec.yaml에 vibration: ^1.8.4 필요
 import '../../../core/workout_provider.dart';
 
-// 운동 모델 공유
+// 1. 운동 모델 정의
 class Exercise {
   final String id;
   final String name;
   final int sets;
   final int reps;
   final double weight;
-  final List<bool> setStatus; 
-  final List<int?> setRpe; 
+  final List<bool> setStatus;
+  final List<int?> setRpe;
 
   Exercise({
     required this.id,
@@ -22,7 +25,7 @@ class Exercise {
     List<bool>? setStatus,
     List<int?>? setRpe,
   }) : setStatus = setStatus ?? List.filled(sets, false),
-       setRpe = setRpe ?? List.filled(sets, null);
+        setRpe = setRpe ?? List.filled(sets, null);
 
   Exercise copyWith({
     String? id,
@@ -55,186 +58,37 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  // 타이머 관련
-  int _selectedRestTime = 120;
-  int _currentTimerSeconds = 120;
-  bool _isResting = false;
-  Timer? _timer;
+  int _selectedRestTime = 180; // 기본 3분
+  Timer? _restTimer;
+  Timer? _cardioTimer;
+  int _remainingSeconds = 0;
+  bool _isWorkoutFinished = false; // 정산 상태
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _restTimer?.cancel();
+    _cardioTimer?.cancel();
     super.dispose();
   }
 
-  void _setRestTime(int seconds) {
-    setState(() {
-      _selectedRestTime = seconds;
-      if (!_isResting) _currentTimerSeconds = seconds;
-    });
-  }
-
-  void _toggleTimer() {
-    if (_isResting) {
-      _timer?.cancel();
-      setState(() {
-        _isResting = false;
-        _currentTimerSeconds = _selectedRestTime;
-      });
-    } else {
-      _startTimerDirectly();
-    }
-  }
-
-  bool _isCardioTimer = false;
-
-  void _startTimerDirectly({bool isCardio = false}) {
-    _timer?.cancel();
-    setState(() {
-      _isResting = true;
-      _isCardioTimer = isCardio;
-      _currentTimerSeconds = _selectedRestTime;
-    });
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_currentTimerSeconds <= 0) {
-        timer.cancel();
-        setState(() {
-          _isResting = false;
-          _isCardioTimer = false;
-          _currentTimerSeconds = _selectedRestTime;
-        });
-      } else {
-        setState(() => _currentTimerSeconds--);
-      }
-    });
-  }
-
-  void _toggleSetStatus(int exerciseIndex, int setIndex, List<Exercise> exercises, {bool isAi = false}) {
-    if (exercises[exerciseIndex].setStatus[setIndex]) {
-      ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, null, isAi: isAi);
-    } else {
-      // 세트 종료 시 처리
-      final currentEx = exercises[exerciseIndex];
-      final isLastSet = setIndex == currentEx.sets - 1;
-      
-      if (isLastSet) {
-        // 마지막 세트 완료 시 팝업 띄우기
-        _showSetCompletionPopup(exerciseIndex, setIndex, exercises, isAi: isAi);
-      } else {
-        // 일반 세트 완료 시 기존 RPE 다이얼로그
-        if (_isResting && _isCardioTimer) {
-          ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, 5, isAi: isAi);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('유산소 중에는 자동 휴식 타이머가 작동하지 않습니다.'))
-          );
-        } else {
-          _showRpeDialog(exerciseIndex, setIndex, exercises, isAi: isAi);
-        }
-      }
-    }
-  }
-
-  void _showSetCompletionPopup(int exerciseIndex, int setIndex, List<Exercise> exercises, {bool isAi = false}) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.celebration, color: Colors.orange),
-            const SizedBox(width: 8),
-            Expanded(child: Text('${exercises[exerciseIndex].name} 종료!')),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('수고하셨습니다. 모든 세트를 마쳤습니다.', style: TextStyle(fontSize: 16)),
-            const SizedBox(height: 20),
-            const Text('마지막 세트의 RPE(운동 강도)를 입력해 주세요.', style: TextStyle(fontSize: 14, color: Colors.grey)),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8, runSpacing: 8, alignment: WrapAlignment.center,
-              children: List.generate(10, (index) {
-                int rpe = index + 1;
-                return InkWell(
-                  onTap: () {
-                    ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, rpe, isAi: isAi);
-                    _startTimerDirectly(isCardio: false);
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(color: Colors.blue[50 * rpe] ?? Colors.blue[900], shape: BoxShape.circle),
-                    child: Center(child: Text('$rpe', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                  ),
-                );
-              }),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showRpeDialog(int exerciseIndex, int setIndex, List<Exercise> exercises, {bool isAi = false}) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${exercises[exerciseIndex].name} ${setIndex + 1}세트 강도'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('이 세트의 난이도는 어땠나요?\n(1: 매우 쉬움 ~ 10: 실패 지점)', textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 8, runSpacing: 8, alignment: WrapAlignment.center,
-              children: List.generate(10, (index) {
-                int rpe = index + 1;
-                return InkWell(
-                  onTap: () {
-                    ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, rpe, isAi: isAi);
-                    _startTimerDirectly(isCardio: false);
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(color: Colors.blue[50 * rpe] ?? Colors.blue[900], shape: BoxShape.circle),
-                    child: Center(child: Text('$rpe', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                  ),
-                );
-              }),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
+  // --- 유산소 및 추가 운동 다이얼로그 ---
   void _showCardioSelectionDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('유산소 선택'),
+        title: const Text('유산소 추가', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
               leading: const Icon(Icons.directions_bike, color: Colors.orange),
-              title: const Text('실내 사이클'),
-              onTap: () {
-                _addCardio('실내 사이클');
-                Navigator.pop(context);
-              },
+              title: const Text('실내 사이클', style: TextStyle(color: Colors.black)),
+              onTap: () { _addCardio('실내 사이클'); Navigator.pop(context); },
             ),
             ListTile(
               leading: const Icon(Icons.directions_run, color: Colors.orange),
-              title: const Text('런닝머신'),
-              onTap: () {
-                _addCardio('런닝머신');
-                Navigator.pop(context);
-              },
+              title: const Text('런닝머신', style: TextStyle(color: Colors.black)),
+              onTap: () { _addCardio('런닝머신'); Navigator.pop(context); },
             ),
           ],
         ),
@@ -246,44 +100,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.read(workoutProvider.notifier).addExercise(Exercise(
       id: DateTime.now().toString(),
       name: name,
-      sets: 1,
-      reps: 30, // 기본 30분
-      weight: 0,
+      sets: 1, reps: 30, weight: 0,
     ));
   }
 
   void _showAddExerciseDialog() {
-    final nameController = TextEditingController();
-    final setsController = TextEditingController(text: '3');
-    final repsController = TextEditingController(text: '10');
-    final weightController = TextEditingController(text: '60');
-
+    final nameCont = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('새 운동 추가'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: '운동 이름')),
-              TextField(controller: setsController, decoration: const InputDecoration(labelText: '세트 수'), keyboardType: TextInputType.number),
-              TextField(controller: repsController, decoration: const InputDecoration(labelText: '회수'), keyboardType: TextInputType.number),
-              TextField(controller: weightController, decoration: const InputDecoration(labelText: '무게 (kg)'), keyboardType: TextInputType.number),
-            ],
-          ),
+        title: const Text('새 운동 추가', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: nameCont,
+          style: const TextStyle(color: Colors.black),
+          decoration: const InputDecoration(labelText: '운동 이름', labelStyle: TextStyle(color: Colors.black54)),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
           ElevatedButton(
             onPressed: () {
-              if (nameController.text.isNotEmpty) {
+              if (nameCont.text.isNotEmpty) {
                 ref.read(workoutProvider.notifier).addExercise(Exercise(
                   id: DateTime.now().toString(),
-                  name: nameController.text,
-                  sets: int.tryParse(setsController.text) ?? 3,
-                  reps: int.tryParse(repsController.text) ?? 10,
-                  weight: double.tryParse(weightController.text) ?? 60.0,
+                  name: nameCont.text,
+                  sets: 3, reps: 10, weight: 60.0,
                 ));
                 Navigator.pop(context);
               }
@@ -295,8 +135,211 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  String _formatTime(int seconds) {
-    return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+  // --- 체크박스 제어 ---
+  void _toggleSetStatus(int exIdx, int sIdx, List<Exercise> exercises) {
+    if (_isWorkoutFinished) return; // 정산 완료 시 터치 방지
+
+    final ex = exercises[exIdx];
+    final bool isCardio = ex.name.contains('런닝머신') || ex.name.contains('사이클');
+
+    if (ex.setStatus[sIdx]) {
+      if (isCardio) _cardioTimer?.cancel();
+      ref.read(workoutProvider.notifier).toggleSet(exIdx, sIdx, null);
+    } else {
+      if (isCardio) {
+        _showCardioTimerPopup(exIdx, sIdx, ex);
+      } else {
+        _showRpeAndTimerSequence(exIdx, sIdx, exercises);
+      }
+    }
+  }
+
+  // --- 유산소 전용 팝업 및 진동 ---
+  void _showCardioTimerPopup(int exIdx, int sIdx, Exercise ex) {
+    _remainingSeconds = ex.reps * 60;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            _cardioTimer?.cancel();
+            _cardioTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+              if (_remainingSeconds > 0) {
+                if (mounted) setDialogState(() => _remainingSeconds--);
+              } else {
+                timer.cancel();
+                _triggerVibrationAndFinish(exIdx, sIdx);
+                Navigator.pop(context);
+              }
+            });
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Center(child: Text('${ex.name} 중...', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black))),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${_remainingSeconds ~/ 60}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}',
+                    style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Colors.orange),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text('지방이 타고 있습니다!', style: TextStyle(color: Colors.black54)),
+                ],
+              ),
+              actions: [
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      _cardioTimer?.cancel();
+                      ref.read(workoutProvider.notifier).toggleSet(exIdx, sIdx, 5);
+                      Navigator.pop(context);
+                    },
+                    child: const Text('운동 종료', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                  ),
+                )
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _triggerVibrationAndFinish(int exIdx, int sIdx) {
+    ref.read(workoutProvider.notifier).toggleSet(exIdx, sIdx, 5);
+    Vibration.vibrate(duration: 1500); // 1.5초 진동
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('🎉 목표 유산소 달성! 수고하셨습니다.'), backgroundColor: Colors.orange),
+      );
+    }
+  }
+
+  // --- 웨이트 휴식 타이머 및 RPE ---
+  void _showRpeAndTimerSequence(int exIdx, int sIdx, List<Exercise> exercises) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text('${exercises[exIdx].name} 완료!', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('체감 강도(RPE)를 선택하세요.', style: TextStyle(color: Colors.black54)),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 8, runSpacing: 8, alignment: WrapAlignment.center,
+              children: List.generate(10, (index) {
+                int rpe = index + 1;
+                return InkWell(
+                  onTap: () {
+                    ref.read(workoutProvider.notifier).toggleSet(exIdx, sIdx, rpe);
+                    Navigator.pop(context);
+                    if (sIdx < exercises[exIdx].sets - 1) _showRestTimerPopup();
+                  },
+                  child: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(color: Colors.blue[50 * rpe] ?? Colors.blue[900], shape: BoxShape.circle),
+                    child: Center(child: Text('$rpe', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  ),
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRestTimerPopup() {
+    _remainingSeconds = _selectedRestTime;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            _restTimer?.cancel();
+            _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+              if (_remainingSeconds > 0) {
+                if (mounted) setDialogState(() => _remainingSeconds--);
+              } else {
+                timer.cancel();
+                Navigator.pop(context);
+              }
+            });
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Center(child: Text('휴식 타이머', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold))),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('${_remainingSeconds ~/ 60}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}',
+                      style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _restOption(setDialogState, '2분', 120),
+                      _restOption(setDialogState, '3분', 180),
+                      _restOption(setDialogState, '5분', 300),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [Center(child: TextButton(onPressed: () { _restTimer?.cancel(); Navigator.pop(context); }, child: const Text('건너뛰기', style: TextStyle(color: Colors.red))))],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _restOption(StateSetter setDialogState, String label, int seconds) {
+    bool isSel = _selectedRestTime == seconds;
+    return InkWell(
+      onTap: () => setDialogState(() { _selectedRestTime = seconds; _remainingSeconds = seconds; }),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(color: isSel ? const Color(0xFF2563EB) : Colors.grey[200], borderRadius: BorderRadius.circular(20)),
+        child: Text(label, style: TextStyle(color: isSel ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  // --- 정산 및 AI 루틴 요청 ---
+  void _processAiRecommendation(List<Exercise> currentExercises) async {
+    String summary = currentExercises.map((e) {
+      String rpes = e.setRpe.where((r) => r != null).join(', ');
+      return "${e.name}: ${e.weight}kg x ${e.sets}세트 (RPE: $rpes)";
+    }).join('\n');
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'user_id': 'master_user',
+          'message': '오늘 기록 기반으로 점진적 과부하 가이드를 제공하고 다음 운동 무게를 추천해줘.',
+          'context': summary,
+        }),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        setState(() => _isWorkoutFinished = true);
+        showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+                title: const Text('🤖 AI 코치 분석 결과', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                content: SingleChildScrollView(child: Text(data['response'], style: const TextStyle(color: Colors.black))),
+                actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('확인'))]
+            )
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('서버 연결 실패')));
+    }
   }
 
   @override
@@ -308,30 +351,99 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       completedSets += ex.setStatus.where((s) => s).length;
     }
     final double percent = totalSets == 0 ? 0 : completedSets / totalSets;
-    final bool isAllFinished = percent >= 1.0 && exercises.isNotEmpty;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
         title: const Text('Gains & Guide', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white, elevation: 0,
+        actions: [
+          if (!_isWorkoutFinished) ...[
+            IconButton(onPressed: _showCardioSelectionDialog, icon: const Icon(Icons.directions_run, color: Colors.orange)),
+            IconButton(onPressed: _showAddExerciseDialog, icon: const Icon(Icons.add_circle, color: Colors.blue)),
+          ]
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            if (exercises.isEmpty) _buildEmptyStateAdvice(),
-            _buildTimerCard(),
-            const SizedBox(height: 16),
             _buildProgressCard(completedSets, totalSets, percent),
-            if (isAllFinished) ...[
-              const SizedBox(height: 16),
-              _buildFinishButton(exercises),
-            ],
             const SizedBox(height: 16),
             _buildExerciseList(exercises),
+            const SizedBox(height: 24),
+            _isWorkoutFinished
+                ? _buildFinishedBanner()
+                : (percent >= 1.0 && exercises.isNotEmpty ? _buildFinishButton(exercises) : const SizedBox.shrink()),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildProgressCard(int comp, int tot, double per) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('오늘의 세트 달성도', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              Text(_isWorkoutFinished ? '정산 완료' : '$comp / $tot 세트', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(value: per, backgroundColor: Colors.grey[200], color: _isWorkoutFinished ? Colors.blue : Colors.green, minHeight: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExerciseList(List<Exercise> exercises) {
+    return Opacity(
+      opacity: _isWorkoutFinished ? 0.6 : 1.0,
+      child: ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: exercises.length,
+        itemBuilder: (context, exIndex) {
+          final ex = exercises[exIndex];
+          final bool isCardio = ex.name.contains('런닝머신') || ex.name.contains('사이클');
+          return Card(
+            color: Colors.white,
+            margin: const EdgeInsets.only(bottom: 12),
+            elevation: 2,
+            child: ExpansionTile(
+              initiallyExpanded: true,
+              textColor: Colors.black, collapsedTextColor: Colors.black,
+              title: Text(ex.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+              subtitle: Text(isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg', style: const TextStyle(color: Colors.black54)),
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Column(
+                    children: List.generate(ex.sets, (sIdx) {
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(isCardio ? '목표 시간' : '${sIdx + 1}세트', style: const TextStyle(color: Colors.black87, fontSize: 16)),
+                          Text(isCardio ? '${ex.reps}분' : '${ex.reps}회 / ${ex.weight}kg', style: const TextStyle(color: Colors.black, fontSize: 16)),
+                          Checkbox(
+                            value: ex.setStatus[sIdx],
+                            activeColor: Colors.green,
+                            onChanged: _isWorkoutFinished ? null : (_) => _toggleSetStatus(exIndex, sIdx, exercises),
+                          ),
+                        ],
+                      );
+                    }),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -339,362 +451,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildFinishButton(List<Exercise> exercises) {
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: () => _showSummaryDialog(exercises),
-        icon: const Icon(Icons.check_circle_outline, color: Colors.white),
-        label: const Text('오늘의 훈련 종료 및 정산', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF22C55E),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+      child: ElevatedButton(
+        onPressed: () => _processAiRecommendation(exercises),
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+        child: const Text('오늘의 훈련 종료 및 정산', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  void _showSummaryDialog(List<Exercise> exercises) {
-    double totalVolume = 0;
-    int totalCals = 0;
-    
-    for (var ex in exercises) {
-      // 볼륨: 무게 * 횟수 * 완료된 세트 수
-      int completedSetsCount = ex.setStatus.where((s) => s).length;
-      totalVolume += ex.weight * ex.reps * completedSetsCount;
-      
-      // 칼로리 간이 계산 (근력: 세트당 5-10kcal, 유산소: 분당 7-10kcal)
-      if (ex.name.contains('사이클') || ex.name.contains('런닝머신')) {
-        totalCals += (ex.reps * 8).toInt(); // reps를 분 단위로 활용
-      } else {
-        totalCals += (completedSetsCount * 7);
-      }
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('🏋️ 오늘의 훈련 리포트', textAlign: TextAlign.center),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _summaryItem('총 훈련 볼륨', '${totalVolume.toStringAsFixed(0)} kg', Colors.blue),
-            _summaryItem('예상 소모 칼로리', '$totalCals kcal', Colors.orange),
-            const Divider(height: 30),
-            const Text('AI 코치가 내일의 보조 운동을\n분석하여 루틴에 추가합니다...', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              _processAiRecommendation(exercises);
-              Navigator.pop(context);
-            },
-            child: const Text('확인 및 AI 분석 요청'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _processAiRecommendation(List<Exercise> currentExercises) async {
-    // 1. 오늘의 데이터를 텍스트로 정리
-    String workoutSummary = currentExercises.map((e) => 
-      "${e.name}: ${e.weight}kg x ${e.sets}세트 (강도RPE: ${e.setRpe.where((r) => r != null).join(',')})"
-    ).join('\n');
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('AI 코치가 오늘의 데이터를 분석하여 내일의 보조 운동을 설계 중입니다...'),
-        backgroundColor: Colors.blue,
-      )
-    );
-
-    // 2. 서버 연동 및 자동 추가 로직 (시뮬레이션)
-    // 실제 운영 시에는 http.post를 통해 backend_ai와 통신하여 JSON을 받아옵니다.
-    Future.delayed(const Duration(seconds: 2), () {
-      final recommendations = [
-        Exercise(
-          id: 'ai_1_${DateTime.now().millisecondsSinceEpoch}',
-          name: '사이드 레터럴 레이즈', 
-          sets: 3, reps: 15, weight: 5,
-        ),
-        Exercise(
-          id: 'ai_2_${DateTime.now().millisecondsSinceEpoch}',
-          name: '삼두 케이블 푸쉬다운', 
-          sets: 3, reps: 12, weight: 15,
-        ),
-      ];
-
-      // AI 추천 루틴 섹션에 통째로 주입
-      ref.read(workoutProvider.notifier).setAiRecommendations(recommendations);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('내일의 맞춤형 보조 루틴이 배정되었습니다!'),
-          backgroundColor: Colors.purple,
-        )
-      );
-    });
-  }
-
-  Widget _summaryItem(String label, String value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyStateAdvice() {
+  Widget _buildFinishedBanner() {
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.blue[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue[100]!),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.info_outline, color: Colors.blue),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              '오늘은 지정된 루틴이 없는 휴식일입니다. 가벼운 운동을 추가해 보시겠어요?',
-              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimerCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+      width: double.infinity, padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.green.shade200)),
       child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('휴식 타이머', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('세트 간 권장 휴식', style: TextStyle(fontSize: 14, color: Colors.grey)),
-              ]),
-              Text(_formatTime(_currentTimerSeconds), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_restTimeButton('2분', 120), _restTimeButton('3분', 180), _restTimeButton('5분', 300)]),
-          const SizedBox(height: 16),
-          SizedBox(width: double.infinity, child: ElevatedButton(
-            onPressed: _toggleTimer,
-            style: ElevatedButton.styleFrom(backgroundColor: _isResting ? Colors.red[400] : const Color(0xFF2563EB), padding: const EdgeInsets.symmetric(vertical: 12)),
-            child: Text(_isResting ? '타이머 중지' : '타이머 시작', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-          )),
+        children: const [
+          Icon(Icons.check_circle, color: Colors.green, size: 48),
+          SizedBox(height: 12),
+          Text('오운완! 오늘 운동 끝', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
+          Text('데이터가 저장되었습니다. 내일 만나요!', style: TextStyle(color: Colors.black54)),
         ],
       ),
-    );
-  }
-
-  Widget _restTimeButton(String label, int seconds) {
-    bool isSel = _selectedRestTime == seconds;
-    return InkWell(onTap: () => _setRestTime(seconds), child: Container(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8), decoration: BoxDecoration(color: isSel ? const Color(0xFF2563EB) : Colors.grey[200], borderRadius: BorderRadius.circular(20)), child: Text(label, style: TextStyle(color: isSel ? Colors.white : Colors.black87, fontWeight: FontWeight.bold))));
-  }
-
-  Widget _buildProgressCard(int comp, int tot, double per) {
-    return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]), child: Column(children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('오늘의 세트 달성도', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), Text('$comp / $tot 세트', style: const TextStyle(fontSize: 14, color: Colors.blue))]), const SizedBox(height: 12), LinearProgressIndicator(value: per, backgroundColor: Colors.grey[200], valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF22C55E)), minHeight: 10)]));
-  }
-
-  Widget _buildExerciseList(List<Exercise> exercises) {
-    final aiExercises = ref.watch(workoutProvider.notifier).aiRecommendedExercises;
-
-    return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
-      child: Column(
-        children: [
-          // AI 추천 섹션 (데이터가 있을 때만 표시)
-          if (aiExercises.isNotEmpty) ...[
-            _buildAiSectionHeader(),
-            ...aiExercises.asMap().entries.map((entry) => _buildExerciseTile(entry.key, entry.value, aiExercises, isAi: true)),
-            const Divider(thickness: 2, color: Color(0xFFF3F4F6)),
-          ],
-
-          // 일반 운동 목록 헤더
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('오늘의 메인 루틴', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: _showCardioSelectionDialog,
-                      icon: const Icon(Icons.directions_run, color: Color(0xFFF59E0B), size: 30),
-                    ),
-                    IconButton(
-                      onPressed: _showAddExerciseDialog,
-                      icon: const Icon(Icons.add_circle, color: Color(0xFF2563EB), size: 30),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          ListView.builder(
-            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-            itemCount: exercises.length,
-            itemBuilder: (context, exIndex) {
-              return _buildExerciseTile(exIndex, exercises[exIndex], exercises);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAiSectionHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.purple[50],
-        borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.psychology, color: Colors.purple),
-          SizedBox(width: 8),
-          Text('🤖 AI 분석 추천 보조 루틴', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold, fontSize: 16)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExerciseTile(int exIndex, Exercise ex, List<Exercise> list, {bool isAi = false}) {
-    final isCardio = ex.name.contains('런닝머신') || ex.name.contains('사이클');
-    return ExpansionTile(
-      initiallyExpanded: true,
-      title: Text(ex.name, style: TextStyle(fontWeight: FontWeight.bold, decoration: ex.isAllCompleted ? TextDecoration.lineThrough : null)),
-      subtitle: Text(isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg'),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: isCardio 
-            ? _buildCardioCheck(exIndex, ex, isAi: isAi)
-            : _buildWeightTrainingCheck(exIndex, ex, list, isAi: isAi),
-        ),
-      ],
-    );
-  }
-
-  int _selectedCardioMinutes = 30; // 유산소 기본 30분
-
-  Widget _buildCardioCheck(int exIndex, Exercise ex, {bool isAi = false}) {
-    bool isDone = ex.setStatus[0];
-    return Column(
-      children: [
-        if (!isDone)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('목표 시간: ', style: TextStyle(fontWeight: FontWeight.bold)),
-              DropdownButton<int>(
-                value: _selectedCardioMinutes,
-                items: [15, 30, 45, 60].map((int value) {
-                  return DropdownMenuItem<int>(
-                    value: value,
-                    child: Text('$value분'),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  setState(() => _selectedCardioMinutes = val!);
-                },
-              ),
-            ],
-          ),
-        const SizedBox(height: 10),
-        InkWell(
-          onTap: () {
-            setState(() {
-              bool newStatus = !isDone;
-              ref.read(workoutProvider.notifier).toggleSet(exIndex, 0, newStatus ? 5 : null, isAi: isAi);
-              if (newStatus) {
-                // 유산소 전용 타이머 시작 (isCardio: true 전달)
-                _selectedRestTime = _selectedCardioMinutes * 60;
-                _startTimerDirectly(isCardio: true);
-              } else {
-                _timer?.cancel();
-                _isResting = false;
-              }
-            });
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: isDone ? const Color(0xFFF59E0B) : Colors.white,
-              border: Border.all(color: isDone ? const Color(0xFFF59E0B) : Colors.grey[300]!),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Text(
-                isDone ? '유산소 수행 중... (클릭 시 취소)' : '$_selectedCardioMinutes분 유산소 시작하기',
-                style: TextStyle(color: isDone ? Colors.white : Colors.black87, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWeightTrainingCheck(int exIndex, Exercise ex, List<Exercise> exercises, {bool isAi = false}) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: const [
-            Text('세트', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-            Text('목표', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-            Text('완료', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ...List.generate(ex.sets, (sIdx) {
-          bool isDone = ex.setStatus[sIdx];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Text('${sIdx + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text('${ex.reps}회 / ${ex.weight}kg', style: const TextStyle(color: Colors.black87)),
-                InkWell(
-                  onTap: () => _toggleSetStatus(exIndex, sIdx, exercises, isAi: isAi),
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: isDone ? const Color(0xFF22C55E) : Colors.white,
-                      border: Border.all(color: isDone ? const Color(0xFF22C55E) : Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: isDone ? const Icon(Icons.check, size: 20, color: Colors.white) : null,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
-      ],
     );
   }
 }
