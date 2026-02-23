@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'package:vibration/vibration.dart'; // pubspec.yaml에 vibration 패키지 확인
+import 'package:flutter_vibrate/flutter_vibrate.dart'; // Vibration 대신 Vibrate 사용
 import '../../../core/workout_provider.dart';
 import '../../../core/database/database_helper.dart';
 
@@ -40,7 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Timer? _cardioTimer;
   Timer? _restTimer;
   int _remainingSeconds = 0;
-  int _selectedRestTime = 180; // 기본 3분
+  int _selectedRestTime = 180; // 기본 휴식 시간 3분
   bool _isWorkoutFinished = false;
 
   @override
@@ -57,7 +57,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return keywords.any((k) => name.contains(k));
   }
 
-  // --- 추가 다이얼로그 (유산소, 커스텀) ---
+  // --- 유산소 및 운동 추가 다이얼로그 ---
   void _showCardioSelectionDialog() {
     showDialog(
       context: context,
@@ -145,7 +145,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- 체크박스 및 타이머 제어 ---
+  // --- 체크박스 및 타이머 처리 ---
   void _toggleSetStatus(int exIdx, int sIdx, List<Exercise> exercises) {
     if (_isWorkoutFinished) return;
     final ex = exercises[exIdx];
@@ -206,7 +206,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _onCardioTimerEnd(int exIdx, int sIdx) {
     ref.read(workoutProvider.notifier).toggleSet(exIdx, sIdx, 5);
-    Vibration.vibrate(duration: 1500);
+    Vibrate.vibrate(); // Vibrate 사용
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('🎉 목표 유산소 달성!'), backgroundColor: Colors.orange));
     }
@@ -221,7 +221,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('체감 강도(RPE)를 선택하세요.', style: TextStyle(color: Colors.black54)),
+            const Text('체감 강도(RPE)를 선택하세요.'),
             const SizedBox(height: 20),
             Wrap(
               spacing: 8, runSpacing: 8, alignment: WrapAlignment.center,
@@ -247,7 +247,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- 휴식 타이머 팝업 (버튼 복구됨) ---
+  // --- 휴식 타이머 팝업 (2, 3, 5분 선택 복구) ---
   void _showRestTimerPopup() {
     _remainingSeconds = _selectedRestTime;
     showDialog(
@@ -332,7 +332,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final response = await http.post(
         Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'user_id': 'master_user', 'message': '$pInfo 오늘 운동 분석해줘.', 'context': summary}),
+        body: jsonEncode({'user_id': 'master_user', 'message': '$pInfo 오늘 운동 기록을 바탕으로 다음 가이드를 줘.', 'context': summary}),
       );
       Navigator.pop(context);
       if (response.statusCode == 200) {
@@ -361,6 +361,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text('Gains & Guide', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
+        elevation: 0,
         actions: [
           if (!_isWorkoutFinished) ...[
             IconButton(onPressed: _showCardioSelectionDialog, icon: const Icon(Icons.directions_run, color: Colors.orange)),
@@ -419,10 +420,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Text(ex.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black, fontSize: 18)),
                 if (!_isWorkoutFinished) IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => ref.read(workoutProvider.notifier).removeExercise(ex.id)),
               ]),
-              subtitle: Text(
-                isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg',
-                style: const TextStyle(color: Colors.black54),
-              ),
+              subtitle: Text(isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg', style: const TextStyle(color: Colors.black54)),
               children: List.generate(ex.sets, (sIdx) => ListTile(
                 title: Text(isCardio ? '목표 시간: ${ex.reps}분' : '${ex.weight}kg / ${ex.reps}회', style: const TextStyle(color: Colors.black87)),
                 trailing: Checkbox(value: ex.setStatus[sIdx], onChanged: _isWorkoutFinished ? null : (v) => _toggleSetStatus(idx, sIdx, exercises)),
