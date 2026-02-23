@@ -37,7 +37,7 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
     try {
       // ⚠️ 클라우드 서버 주소 반영
       final response = await http.post(
-        Uri.parse('https://gains-and-guide.onrender.com/chat'),
+        Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'user_id': 'master_user',
