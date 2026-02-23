@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/workout_provider.dart';
-import '../../home/presentation/home_screen.dart';
+import '../domain/exercise.dart';
 
 class WeeklyProgram {
   final String title;
@@ -33,19 +33,19 @@ class ProgramSelectionScreen extends ConsumerWidget {
         description: '주인님의 현재 중량(스쿼트 100kg+, 데드리프트 145kg+)에 맞춘 커스텀 5x5 루틴입니다.',
         weeklyExercises: {
           1: [ // 월 (Workout A)
-            Exercise(id: 's1_a', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
-            Exercise(id: 's2_a', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 80),
-            Exercise(id: 's3_a', name: '펜들레이 로우', sets: 5, reps: 5, weight: 80),
+            Exercise.initial(id: 's1_a', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
+            Exercise.initial(id: 's2_a', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 80),
+            Exercise.initial(id: 's3_a', name: '펜들레이 로우', sets: 5, reps: 5, weight: 80),
           ],
           3: [ // 수 (Workout B)
-            Exercise(id: 's1_b', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
-            Exercise(id: 's4_b', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 55),
-            Exercise(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 145),
+            Exercise.initial(id: 's1_b', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
+            Exercise.initial(id: 's4_b', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 55),
+            Exercise.initial(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 145),
           ],
           5: [ // 금 (Workout A 다시)
-            Exercise(id: 's1_c', name: '백 스쿼트', sets: 5, reps: 5, weight: 102.5),
-            Exercise(id: 's2_c', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 82.5),
-            Exercise(id: 's3_c', name: '펜들레이 로우', sets: 5, reps: 5, weight: 82.5),
+            Exercise.initial(id: 's1_c', name: '백 스쿼트', sets: 5, reps: 5, weight: 102.5),
+            Exercise.initial(id: 's2_c', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 82.5),
+            Exercise.initial(id: 's3_c', name: '펜들레이 로우', sets: 5, reps: 5, weight: 82.5),
           ],
         },
         icon: Icons.fitness_center,
@@ -56,12 +56,12 @@ class ProgramSelectionScreen extends ConsumerWidget {
         level: '고급자',
         description: '월/목(Push), 화/금(Pull), 수/토(Legs) 순서로 자동으로 루틴이 바뀝니다.',
         weeklyExercises: {
-          1: [Exercise(id: 'p1', name: '벤치프레스', sets: 4, reps: 10, weight: 60), Exercise(id: 'p2', name: '숄더프레스', sets: 3, reps: 10, weight: 30)], // 월 (Push)
-          4: [Exercise(id: 'p1', name: '벤치프레스', sets: 4, reps: 10, weight: 60), Exercise(id: 'p2', name: '숄더프레스', sets: 3, reps: 10, weight: 30)], // 목 (Push)
-          2: [Exercise(id: 'l1', name: '데드리프트', sets: 3, reps: 8, weight: 100), Exercise(id: 'l2', name: '풀업', sets: 3, reps: 10, weight: 0)], // 화 (Pull)
-          5: [Exercise(id: 'l1', name: '데드리프트', sets: 3, reps: 8, weight: 100), Exercise(id: 'l2', name: '풀업', sets: 3, reps: 10, weight: 0)], // 금 (Pull)
-          3: [Exercise(id: 'h1', name: '스쿼트', sets: 4, reps: 8, weight: 80), Exercise(id: 'h2', name: '레그프레스', sets: 3, reps: 12, weight: 120)], // 수 (Legs)
-          6: [Exercise(id: 'h1', name: '스쿼트', sets: 4, reps: 8, weight: 80), Exercise(id: 'h2', name: '레그프레스', sets: 3, reps: 12, weight: 120)], // 토 (Legs)
+          1: [Exercise.initial(id: 'p1', name: '벤치프레스', sets: 4, reps: 10, weight: 60), Exercise.initial(id: 'p2', name: '숄더프레스', sets: 3, reps: 10, weight: 30)], // 월 (Push)
+          4: [Exercise.initial(id: 'p1', name: '벤치프레스', sets: 4, reps: 10, weight: 60), Exercise.initial(id: 'p2', name: '숄더프레스', sets: 3, reps: 10, weight: 30)], // 목 (Push)
+          2: [Exercise.initial(id: 'l1', name: '데드리프트', sets: 3, reps: 8, weight: 100), Exercise.initial(id: 'l2', name: '풀업', sets: 3, reps: 10, weight: 0)], // 화 (Pull)
+          5: [Exercise.initial(id: 'l1', name: '데드리프트', sets: 3, reps: 8, weight: 100), Exercise.initial(id: 'l2', name: '풀업', sets: 3, reps: 10, weight: 0)], // 금 (Pull)
+          3: [Exercise.initial(id: 'h1', name: '스쿼트', sets: 4, reps: 8, weight: 80), Exercise.initial(id: 'h2', name: '레그프레스', sets: 3, reps: 12, weight: 120)], // 수 (Legs)
+          6: [Exercise.initial(id: 'h1', name: '스쿼트', sets: 4, reps: 8, weight: 80), Exercise.initial(id: 'h2', name: '레그프레스', sets: 3, reps: 12, weight: 120)], // 토 (Legs)
         },
         icon: Icons.repeat,
         color: Colors.purple,
@@ -71,13 +71,13 @@ class ProgramSelectionScreen extends ConsumerWidget {
         level: '체지방 연소',
         description: '매일 실내 사이클과 런닝머신을 병행하여 체지방을 효과적으로 태웁니다.',
         weeklyExercises: {
-          1: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
-          2: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
-          3: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
-          4: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
-          5: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
-          6: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
-          7: [Exercise(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          1: [Exercise.initial(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise.initial(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          2: [Exercise.initial(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise.initial(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          3: [Exercise.initial(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise.initial(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          4: [Exercise.initial(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise.initial(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          5: [Exercise.initial(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise.initial(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          6: [Exercise.initial(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise.initial(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
+          7: [Exercise.initial(id: 'c1', name: '실내 사이클', sets: 1, reps: 30, weight: 0), Exercise.initial(id: 't1', name: '런닝머신', sets: 1, reps: 20, weight: 0)],
         },
         icon: Icons.directions_run,
         color: Colors.orange,
