@@ -113,16 +113,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (exercises[exerciseIndex].setStatus[setIndex]) {
       ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, null, isAi: isAi);
     } else {
-      // 유산소 타이머가 가동 중이면 근력 운동 자동 휴식 타이머 시작 차단
-      if (_isResting && _isCardioTimer) {
-        ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, 5, isAi: isAi);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('유산소 중에는 자동 휴식 타이머가 작동하지 않습니다.'))
-        );
+      // 세트 종료 시 처리
+      final currentEx = exercises[exerciseIndex];
+      final isLastSet = setIndex == currentEx.sets - 1;
+      
+      if (isLastSet) {
+        // 마지막 세트 완료 시 팝업 띄우기
+        _showSetCompletionPopup(exerciseIndex, setIndex, exercises, isAi: isAi);
       } else {
-        _showRpeDialog(exerciseIndex, setIndex, exercises, isAi: isAi);
+        // 일반 세트 완료 시 기존 RPE 다이얼로그
+        if (_isResting && _isCardioTimer) {
+          ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, 5, isAi: isAi);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('유산소 중에는 자동 휴식 타이머가 작동하지 않습니다.'))
+          );
+        } else {
+          _showRpeDialog(exerciseIndex, setIndex, exercises, isAi: isAi);
+        }
       }
     }
+  }
+
+  void _showSetCompletionPopup(int exerciseIndex, int setIndex, List<Exercise> exercises, {bool isAi = false}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.celebration, color: Colors.orange),
+            const SizedBox(width: 8),
+            Expanded(child: Text('${exercises[exerciseIndex].name} 종료!')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('수고하셨습니다. 모든 세트를 마쳤습니다.', style: TextStyle(fontSize: 16)),
+            const SizedBox(height: 20),
+            const Text('마지막 세트의 RPE(운동 강도)를 입력해 주세요.', style: TextStyle(fontSize: 14, color: Colors.grey)),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8, runSpacing: 8, alignment: WrapAlignment.center,
+              children: List.generate(10, (index) {
+                int rpe = index + 1;
+                return InkWell(
+                  onTap: () {
+                    ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, rpe, isAi: isAi);
+                    _startTimerDirectly(isCardio: false);
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(color: Colors.blue[50 * rpe] ?? Colors.blue[900], shape: BoxShape.circle),
+                    child: Center(child: Text('$rpe', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  ),
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showRpeDialog(int exerciseIndex, int setIndex, List<Exercise> exercises, {bool isAi = false}) {
