@@ -22,7 +22,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Timer? _restTimer;
   int _remainingSeconds = 0;
   int _selectedRestTime = 180;
-  bool _isWorkoutFinished = false;
 
   @override
   void dispose() {
@@ -31,23 +30,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.dispose();
   }
 
-  bool _checkIsCardio(String name) => 
+  bool _checkIsCardio(String name) =>
       name.contains('런닝머신') || name.contains('사이클') || name.contains('유산소');
-  
+
   bool _checkIsBodyweight(String name) {
     const keywords = ['풀업', '턱걸이', '푸쉬업', '팔굽혀펴기', '딥스', '맨몸', '플랭크'];
     return keywords.any((k) => name.contains(k));
   }
 
-  // --- CSV 데이터 생성 로직 (DB 기록 포함) ---
+  // --- CSV 데이터 생성 로직 ---
   Future<String> _generateWorkoutCsv(List<Exercise> currentExercises) async {
-    // 1. 헤더 설정
     String csv = "date,name,weight,sets,reps,rpe_list\n";
-
-    // 2. DB에서 이전 모든 기록 가져오기
     final history = await DatabaseHelper.instance.getAllHistory();
-    
-    // 날짜별로 그룹화하여 AI가 읽기 편한 형식으로 변환
+
     Map<String, Map<String, List<Map<String, dynamic>>>> grouped = {};
     for (var row in history) {
       String date = row['date'].toString().substring(0, 10);
@@ -66,7 +61,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     });
 
-    // 3. 오늘의 실시간 기록 추가 (아직 DB에 안 들어간 경우 대비)
     String today = DateTime.now().toString().split(' ')[0];
     if (!grouped.containsKey(today)) {
       for (var ex in currentExercises) {
@@ -79,11 +73,104 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
       }
     }
-    
     return csv;
   }
 
-  // --- 다이얼로그 및 팝업 로직 ---
+  // --- UI 알림 및 다이얼로그 메서드 ---
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('CSV 데이터를 분석 중입니다...', style: TextStyle(fontWeight: FontWeight.bold))
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAiResultDialog(String response, String csvLog) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('🤖 AI 코치 분석 결과'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('📍 전송된 CSV 로그', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.all(8),
+                color: Colors.grey[100],
+                child: Text(csvLog, style: const TextStyle(fontSize: 10)),
+              ),
+              const Divider(height: 30),
+              Text(response),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('확인'))],
+      ),
+    );
+  }
+
+  // --- 핵심 정산 및 분석 로직 ---
+  void _processAiRecommendation(List<Exercise> currentExercises) async {
+    _showLoadingDialog();
+    try {
+      // 1. 오늘의 기록 저장
+      await ref.read(workoutProvider.notifier).saveCurrentWorkoutToHistory();
+      await _exportHistoryToCsv();
+
+      // 2. 프로필 및 데이터 준비
+      final profile = await DatabaseHelper.instance.getProfile();
+      String pInfo = profile != null ? "사용자 체중: ${profile['weight']}kg. " : "";
+      String fullCsv = await _generateWorkoutCsv(currentExercises);
+
+      // 3. AI 서버 요청
+      final response = await http.post(
+        Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'user_id': 'master_user',
+          'message': '$pInfo 오늘 운동 기록을 분석하고 증량 가이드를 줘.',
+          'context': fullCsv,
+        }),
+      ).timeout(const Duration(seconds: 60));
+
+      if (!mounted) return;
+      Navigator.pop(context); // 로딩창 닫기
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        ref.read(workoutProvider.notifier).finishWorkout(); // 전역 정산 상태 true 설정
+        _showAiResultDialog(data['response'], fullCsv);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('서버 오류: ${response.statusCode}'))
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // 에러 발생 시 로딩창 반드시 닫기
+      print('🚨 정산 에러 상세: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('정산 중 오류가 발생했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // --- 운동 추가 및 제어 로직 ---
   void _showCardioSelectionDialog() {
     showDialog(
       context: context,
@@ -173,7 +260,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       sets: isCardio ? 1 : sets,
-      reps: isCardio ? 30 : reps, 
+      reps: isCardio ? 30 : reps,
       weight: weight,
       isBodyweight: isBodyweight,
       isCardio: isCardio,
@@ -181,9 +268,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _toggleSetStatus(int exIdx, int sIdx, List<Exercise> exercises) {
-    if (_isWorkoutFinished) return;
+    if (ref.read(workoutProvider.notifier).isFinished) return;
     final ex = exercises[exIdx];
-
     if (ex.setStatus[sIdx]) {
       if (ex.isCardio) _cardioTimer?.cancel();
       ref.read(workoutProvider.notifier).toggleSet(exIdx, sIdx, null);
@@ -360,110 +446,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- CSV 기반 AI 정산 ---
-  void _processAiRecommendation(List<Exercise> currentExercises) async {
-    showDialog(
-      context: context, barrierDismissible: false,
-      builder: (context) => const Center(
-        child: Card(
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('CSV 데이터를 분석 중입니다...', style: TextStyle(fontWeight: FontWeight.bold))
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    // DB 및 CSV 저장 로직
-    await ref.read(workoutProvider.notifier).saveCurrentWorkoutToHistory();
-    await _exportHistoryToCsv();
-
-    final profile = await DatabaseHelper.instance.getProfile();
-    String pInfo = profile != null ? "사용자 체중: ${profile['weight']}kg. " : "";
-
-    // CSV 생성 (DB에 저장된 과거 기록 포함)
-    String fullCsv = await _generateWorkoutCsv(currentExercises);
-
-    try {
-      final response = await http.post(
-        Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'user_id': 'master_user',
-          'message': '$pInfo 첨부된 CSV 데이터(과거 및 오늘 기록)를 분석해서 가이드를 줘.',
-          'context': fullCsv,
-        }),
-      ).timeout(const Duration(seconds: 60));
-
-      if (!mounted) return;
-      Navigator.pop(context);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
-        setState(() => _isWorkoutFinished = true);
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('🤖 AI 코치 분석 결과'),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('📍 전송된 CSV 로그', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    color: Colors.grey[100],
-                    child: Text(fullCsv, style: const TextStyle(fontSize: 10)),
-                  ),
-                  const Divider(height: 30),
-                  Text(data['response']),
-                ],
-              ),
-            ),
-            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('확인'))],
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('서버 오류: ${response.statusCode}')));
-      }
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      String msg = e is TimeoutException ? '분석 시간이 너무 오래 걸립니다. 다시 시도해 주세요.' : '서버 연결 실패';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
-  }
-
   Future<void> _exportHistoryToCsv() async {
     try {
       final history = await DatabaseHelper.instance.getAllHistory();
       if (history.isEmpty) return;
-
       String csvData = 'Date,Exercise,Set,Reps,Weight,RPE\n';
       for (var row in history) {
         csvData += '${row['date']},${row['name']},${row['sets']},${row['reps']},${row['weight']},${row['rpe']}\n';
       }
-
       final directory = await getApplicationDocumentsDirectory();
-      final path = '${directory.path}/workout_history.csv';
-      final file = File(path);
+      final file = File('${directory.path}/workout_history.csv');
       await file.writeAsString(csvData);
-      print('CSV exported to: $path');
     } catch (e) {
-      print('Error exporting CSV: $e');
+      print('CSV 내보내기 에러: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final exercises = ref.watch(workoutProvider);
+    final isFinished = ref.watch(workoutProvider.notifier).isFinished;
+
     int totalSets = 0, completedSets = 0;
     for (var ex in exercises) {
       totalSets += ex.sets;
@@ -475,7 +478,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text('Gains & Guide'),
         actions: [
-          if (!_isWorkoutFinished) ...[
+          if (!isFinished) ...[
             IconButton(onPressed: _showCardioSelectionDialog, icon: const Icon(Icons.directions_run, color: AppTheme.warningOrange)),
             IconButton(onPressed: _showAddExerciseDialog, icon: const Icon(Icons.add_circle, color: AppTheme.primaryBlue)),
           ]
@@ -487,9 +490,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             _buildProgressCard(completedSets, totalSets),
             const SizedBox(height: 16),
-            _buildExerciseList(exercises),
+            _buildExerciseList(exercises, isFinished),
             const SizedBox(height: 24),
-            if (_isWorkoutFinished) _buildFinishedBanner()
+            if (isFinished) _buildFinishedBanner()
             else if (isAllSetsDone) _buildFinishButton(exercises)
             else if (exercises.isNotEmpty) _buildIncompleteMessage(completedSets, totalSets)
           ],
@@ -525,9 +528,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildExerciseList(List<Exercise> exercises) {
+  Widget _buildExerciseList(List<Exercise> exercises, bool isFinished) {
     return Opacity(
-      opacity: _isWorkoutFinished ? 0.6 : 1.0,
+      opacity: isFinished ? 0.6 : 1.0,
       child: ListView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
@@ -542,7 +545,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(child: Text(ex.name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18))),
-                  if (!_isWorkoutFinished)
+                  if (!isFinished)
                     IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
                       onPressed: () => ref.read(workoutProvider.notifier).removeExercise(ex.id),
@@ -560,7 +563,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 trailing: Checkbox(
                   value: ex.setStatus[sIdx],
-                  onChanged: _isWorkoutFinished ? null : (v) => _toggleSetStatus(idx, sIdx, exercises),
+                  onChanged: isFinished ? null : (v) => _toggleSetStatus(idx, sIdx, exercises),
                 ),
               )),
             ),
