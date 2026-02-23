@@ -1,79 +1,26 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../features/home/presentation/home_screen.dart'; // Exercise 모델 공유를 위해
+import 'database/database_helper.dart';
+import '../features/home/presentation/home_screen.dart';
 
-// 운동 목록 상태를 관리하는 Notifier
 class WorkoutNotifier extends StateNotifier<List<Exercise>> {
-  WorkoutNotifier() : super([]) {
-    _init();
-  }
+  WorkoutNotifier() : super([]) { _loadSavedProgram(); }
 
   static const String _storageKey = 'saved_weekly_program';
-
-  Future<void> _init() async {
-    await _loadSavedProgram();
-  }
-
-  // AI 추천 보조 운동 목록을 별도로 관리
-  List<Exercise> _aiRecommendedExercises = [];
-  List<Exercise> get aiRecommendedExercises => _aiRecommendedExercises;
-
-  void setAiRecommendations(List<Exercise> recommendations) {
-    _aiRecommendedExercises = recommendations;
-    // 상태를 새로고침하기 위해 현재 상태를 재할당 (UI 업데이트 유도)
-    state = [...state];
-  }
-
-  // 특정 프로그램의 요일별 전체 루틴 적용
   Map<int, List<Exercise>> _currentWeeklyRoutine = {};
 
+  // 1. 요일별 프로그램 적용 (에러 해결 부분)
   Future<void> applyWeeklyProgram(Map<int, List<Exercise>> weeklyRoutine) async {
     _currentWeeklyRoutine = weeklyRoutine;
     await _saveProgram(weeklyRoutine);
     updateRoutineByDay();
   }
 
-  Future<void> _saveProgram(Map<int, List<Exercise>> weeklyRoutine) async {
-    final prefs = await SharedPreferences.getInstance();
-    // Exercise를 JSON으로 직렬화하기 위해 Map으로 변환
-    final Map<String, dynamic> serializableMap = {};
-    weeklyRoutine.forEach((day, exercises) {
-      serializableMap[day.toString()] = exercises.map((e) => {
-        'id': e.id,
-        'name': e.name,
-        'sets': e.sets,
-        'reps': e.reps,
-        'weight': e.weight,
-      }).toList();
-    });
-    
-    await prefs.setString(_storageKey, jsonEncode(serializableMap));
-  }
-
-  Future<void> _loadSavedProgram() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedData = prefs.getString(_storageKey);
-    
-    if (savedData != null) {
-      final Map<String, dynamic> decoded = jsonDecode(savedData);
-      final Map<int, List<Exercise>> loadedRoutine = {};
-      
-      decoded.forEach((dayStr, exList) {
-        final day = int.parse(dayStr);
-        final exercises = (exList as List).map((item) => Exercise(
-          id: item['id'],
-          name: item['name'],
-          sets: item['sets'],
-          reps: item['reps'],
-          weight: (item['weight'] as num).toDouble(),
-        )).toList();
-        loadedRoutine[day] = exercises;
-      });
-      
-      _currentWeeklyRoutine = loadedRoutine;
-      updateRoutineByDay();
-    }
+  // 2. 운동 삭제 기능
+  void removeExercise(String id) async {
+    await DatabaseHelper.instance.deleteExercise(id);
+    state = state.where((ex) => ex.id != id).toList();
   }
 
   void updateRoutineByDay() {
@@ -81,42 +28,39 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     state = _currentWeeklyRoutine[weekday] ?? [];
   }
 
-  // 세트 상태 업데이트
-  void toggleSet(int exIndex, int setIndex, int? rpe, {bool isAi = false}) {
-    if (isAi) {
-      var newAi = [..._aiRecommendedExercises];
-      var ex = newAi[exIndex];
-      var newStatus = [...ex.setStatus];
-      var newRpe = [...ex.setRpe];
+  Future<void> _saveProgram(Map<int, List<Exercise>> routine) async {
+    final prefs = await SharedPreferences.getInstance();
+    final Map<String, dynamic> data = {};
+    routine.forEach((day, exList) {
+      data[day.toString()] = exList.map((e) => {'id': e.id, 'name': e.name, 'sets': e.sets, 'reps': e.reps, 'weight': e.weight}).toList();
+    });
+    await prefs.setString(_storageKey, jsonEncode(data));
+  }
 
-      newStatus[setIndex] = !newStatus[setIndex];
-      newRpe[setIndex] = newStatus[setIndex] ? rpe : null;
-
-      newAi[exIndex] = ex.copyWith(setStatus: newStatus, setRpe: newRpe);
-      _aiRecommendedExercises = newAi;
-      state = [...state]; // Force UI update
-      return;
+  Future<void> _loadSavedProgram() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_storageKey);
+    if (saved != null) {
+      final decoded = jsonDecode(saved) as Map<String, dynamic>;
+      decoded.forEach((day, list) {
+        _currentWeeklyRoutine[int.parse(day)] = (list as List).map((i) => Exercise(id: i['id'], name: i['name'], sets: i['sets'], reps: i['reps'], weight: i['weight'])).toList();
+      });
+      updateRoutineByDay();
     }
+  }
 
-    var newState = [...state];
-    var ex = newState[exIndex];
-    var newStatus = [...ex.setStatus];
-    var newRpe = [...ex.setRpe];
-    
-    newStatus[setIndex] = !newStatus[setIndex];
-    newRpe[setIndex] = newStatus[setIndex] ? rpe : null;
-    
-    newState[exIndex] = ex.copyWith(setStatus: newStatus, setRpe: newRpe);
+  void toggleSet(int exIdx, int sIdx, int? rpe) {
+    final newState = [...state];
+    final ex = newState[exIdx];
+    final newStatus = [...ex.setStatus];
+    final newRpe = [...ex.setRpe];
+    newStatus[sIdx] = !newStatus[sIdx];
+    newRpe[sIdx] = newStatus[sIdx] ? rpe : null;
+    newState[exIdx] = ex.copyWith(setStatus: newStatus, setRpe: newRpe);
     state = newState;
   }
 
-  // 운동 추가
-  void addExercise(Exercise exercise) {
-    state = [...state, exercise];
-  }
+  void addExercise(Exercise ex) { state = [...state, ex]; }
 }
 
-// Provider 정의
-final workoutProvider = StateNotifierProvider<WorkoutNotifier, List<Exercise>>((ref) {
-  return WorkoutNotifier();
-});
+final workoutProvider = StateNotifierProvider<WorkoutNotifier, List<Exercise>>((ref) => WorkoutNotifier());
