@@ -400,7 +400,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           'message': '$pInfo 첨부된 CSV 데이터(과거 및 오늘 기록)를 분석해서 가이드를 줘.',
           'context': fullCsv,
         }),
-      );
+      ).timeout(const Duration(seconds: 60));
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -430,11 +430,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('확인'))],
           ),
         );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('서버 오류: ${response.statusCode}')));
       }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('서버 연결 실패')));
+      String msg = e is TimeoutException ? '분석 시간이 너무 오래 걸립니다. 다시 시도해 주세요.' : '서버 연결 실패';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 
