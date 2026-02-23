@@ -75,6 +75,30 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   void addExercise(Exercise ex) {
     state = [...state, ex];
   }
+
+  Future<void> saveCurrentWorkoutToHistory() async {
+    final now = DateTime.now().toIso8601String();
+    final List<Map<String, dynamic>> historyData = [];
+
+    for (var ex in state) {
+      for (int i = 0; i < ex.sets; i++) {
+        if (ex.setStatus[i]) {
+          historyData.add({
+            'name': ex.name,
+            'sets': i + 1,
+            'reps': ex.reps,
+            'weight': ex.weight,
+            'rpe': ex.setRpe[i],
+            'date': now,
+          });
+        }
+      }
+    }
+
+    if (historyData.isNotEmpty) {
+      await DatabaseHelper.instance.saveWorkoutHistory(historyData);
+    }
+  }
 }
 
 final workoutProvider =

@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_vibrate/flutter_vibrate.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../core/workout_provider.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
@@ -333,6 +335,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
 
+    // DB 및 CSV 저장 로직
+    await ref.read(workoutProvider.notifier).saveCurrentWorkoutToHistory();
+    await _exportHistoryToCsv();
+
     final profile = await DatabaseHelper.instance.getProfile();
     String pInfo = profile != null ? "사용자: 체중 ${profile['weight']}kg, 골격근 ${profile['muscle_mass']}kg. " : "";
     String summary = currentExercises
@@ -369,6 +375,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('서버 연결 실패')));
+    }
+  }
+
+  Future<void> _exportHistoryToCsv() async {
+    try {
+      final history = await DatabaseHelper.instance.getAllHistory();
+      if (history.isEmpty) return;
+
+      String csvData = 'Date,Exercise,Set,Reps,Weight,RPE\n';
+      for (var row in history) {
+        csvData += '${row['date']},${row['name']},${row['sets']},${row['reps']},${row['weight']},${row['rpe']}\n';
+      }
+
+      final directory = await getApplicationDocumentsDirectory();
+      final path = '${directory.path}/workout_history.csv';
+      final file = File(path);
+      await file.writeAsString(csvData);
+      print('CSV exported to: $path');
+    } catch (e) {
+      print('Error exporting CSV: $e');
     }
   }
 
