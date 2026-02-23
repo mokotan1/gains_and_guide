@@ -44,7 +44,7 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
           'message': userMsg,
           'context': contextData,
         }),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 60));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
