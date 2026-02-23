@@ -33,6 +33,8 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
       sets: ex.sets,
       reps: ex.reps,
       weight: ex.weight,
+      isBodyweight: ex.isBodyweight,
+      isCardio: ex.isCardio,
     )).toList();
   }
 
