@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import os
+from groq import Groq
 import google.generativeai as genai
 from dotenv import load_dotenv
 import logging
 
-# 로깅 설정 (Render 로그에서 상세히 보기 위함)
+# 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -13,15 +14,22 @@ load_dotenv()
 
 app = FastAPI()
 
-# GOOGLE_API_KEY 설정 및 확인
+# API 키 설정
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# Groq 클라이언트 초기화 (Primary)
+groq_client = None
+if GROQ_API_KEY:
+    groq_client = Groq(api_key=GROQ_API_KEY)
+    logger.info("✅ Groq API Key가 로드되었습니다. (Llama 3 활성화)")
+
+# Gemini 설정 (Fallback용)
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
-    logger.info("✅ Google API Key가 성공적으로 로드되었습니다.")
-else:
-    logger.error("❌ Google API Key를 찾을 수 없습니다! Render 환경 변수를 확인하세요.")
+    logger.info("✅ Google API Key가 로드되었습니다. (Gemini 활성화)")
 
-# 페르소나 로드 (경로 문제 방지)
+# 페르소나 로드
 current_dir = os.path.dirname(os.path.abspath(__file__))
 persona_path = os.path.join(current_dir, "persona.txt")
 
@@ -33,27 +41,6 @@ except FileNotFoundError:
     SYSTEM_PROMPT = "당신은 전문 헬스 트레이너입니다."
     logger.warning("⚠️ persona.txt를 찾지 못해 기본 페르소나를 사용합니다.")
 
-# AI 모델 설정 (Gemini 1.5 Flash + 안전 설정 완화)
-generation_config = {
-    "temperature": 0.7,
-    "top_p": 0.95,
-    "top_k": 64,
-    "max_output_tokens": 1024,
-}
-
-safety_settings = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-]
-
-model = genai.GenerativeModel(
-    model_name='gemini-2.0-flash-lite-preview-09-2024',
-    generation_config=generation_config,
-    safety_settings=safety_settings
-)
-
 class ChatRequest(BaseModel):
     user_id: str
     message: str
@@ -61,40 +48,41 @@ class ChatRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "Gains & Guide AI Coach Server is Running! 🏋️‍♂️"}
+    return {"status": "online", "message": "Gains & Guide AI (Groq + Gemini) Server is Running!"}
 
 @app.post("/chat")
 async def chat_with_coach(request: ChatRequest):
-    if not GOOGLE_API_KEY:
-        logger.error("API Key 미설정 상태에서 요청이 들어왔습니다.")
-        raise HTTPException(status_code=500, detail="서버에 API 키가 설정되지 않았습니다.")
+    full_prompt = f"{SYSTEM_PROMPT}\n\n[사용자 정보]\n{request.context}\n\n[질문]\n{request.message}"
 
-    try:
-        logger.info(f"요청 수신 - User: {request.user_id}, Message: {request.message[:20]}...")
-        
-        full_prompt = f"""
-{SYSTEM_PROMPT}
+    # 1순위: Groq (Llama 3 70B) 사용 - 초고속 응답
+    if groq_client:
+        try:
+            logger.info("🚀 Groq (Llama 3) 엔진으로 응답 생성 중...")
+            completion = groq_client.chat.completions.create(
+                model="llama3-70b-8192",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": f"[데이터]\n{request.context}\n\n[질문]\n{request.message}"}
+                ],
+                temperature=0.7,
+                max_tokens=1024,
+            )
+            return {"response": completion.choices[0].message.content, "engine": "groq"}
+        except Exception as e:
+            logger.error(f"❌ Groq 오류 발생, Gemini로 전환합니다: {str(e)}")
 
-[사용자 정보 및 과거 데이터]
-운동 기록 컨텍스트: {request.context}
+    # 2순위: Gemini (Fallback) 사용
+    if GOOGLE_API_KEY:
+        try:
+            logger.info("Fallback: Gemini 엔진으로 응답 생성 중...")
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')
+            response = model.generate_content(full_prompt)
+            return {"response": response.text, "engine": "gemini"}
+        except Exception as e:
+            logger.error(f"❌ Gemini 오류 발생: {str(e)}")
+            raise HTTPException(status_code=500, detail="모든 AI 엔진이 응답하지 않습니다.")
 
-[사용자 질문/요청]
-{request.message}
-
-[답변 가이드]
-데이터 기반으로 성실히 답변하고, 필요한 경우 증량이나 휴식을 권고하세요.
-"""
-        response = model.generate_content(full_prompt)
-        
-        if not response.text:
-            logger.error("AI 응답 텍스트가 비어있습니다.")
-            return {"response": "AI가 답변을 생성하지 못했습니다. 다시 시도해 주세요."}
-
-        return {"response": response.text}
-
-    except Exception as e:
-        logger.exception("❌ 답변 생성 중 치명적 오류 발생:")
-        raise HTTPException(status_code=500, detail=f"AI 분석 중 오류가 발생했습니다: {str(e)}")
+    raise HTTPException(status_code=500, detail="API 키가 설정되지 않았습니다.")
 
 if __name__ == "__main__":
     import uvicorn
