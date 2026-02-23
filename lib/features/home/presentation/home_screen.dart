@@ -99,7 +99,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  void _showAiResultDialog(String response, String csvLog) {
+  // 디버그용 CSV 로그 표기가 제거된 결과창
+  void _showAiResultDialog(String response) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -108,14 +109,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('📍 전송된 CSV 로그', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                padding: const EdgeInsets.all(8),
-                color: Colors.grey[100],
-                child: Text(csvLog, style: const TextStyle(fontSize: 10)),
-              ),
-              const Divider(height: 30),
               Text(response),
             ],
           ),
@@ -155,7 +148,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
         ref.read(workoutProvider.notifier).finishWorkout(); // 전역 정산 상태 true 설정
-        _showAiResultDialog(data['response'], fullCsv);
+        _showAiResultDialog(data['response']);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('서버 오류: ${response.statusCode}'))
@@ -163,7 +156,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
     } catch (e) {
       if (mounted) Navigator.pop(context); // 에러 발생 시 로딩창 반드시 닫기
-      print('🚨 정산 에러 상세: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('정산 중 오류가 발생했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
       );
