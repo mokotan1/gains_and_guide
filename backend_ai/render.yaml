@@ -1,10 +1,9 @@
 services:
   - type: web
     name: gains-and-guide-ai
-    env: docker # Dockerfile을 사용하도록 명시
-    rootDir: backend_ai # 빌드 시작 위치 지정
+    env: docker
+    dockerFilePath: backend_ai/Dockerfile
+    dockerContext: backend_ai
     envVars:
       - key: GOOGLE_API_KEY
         sync: false
-      - key: PYTHON_VERSION
-        value: 3.10.0
