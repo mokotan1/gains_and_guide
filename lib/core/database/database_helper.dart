@@ -8,7 +8,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('workout_v3.db');
+    _database = await _initDB('gains_v5.db');
     return _database!;
   }
 
@@ -18,9 +18,23 @@ class DatabaseHelper {
       join(dbPath, filePath),
       version: 1,
       onCreate: (db, version) async {
-        await db.execute('CREATE TABLE exercises (id TEXT PRIMARY KEY, name TEXT, sets INTEGER, reps INTEGER, weight REAL, date TEXT)');
-        await db.execute('CREATE TABLE body_profile (id INTEGER PRIMARY KEY, height REAL, weight REAL, muscle_mass REAL)');
-        await db.execute('CREATE TABLE workout_history (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sets INTEGER, reps INTEGER, weight REAL, rpe INTEGER, date TEXT)');
+        await db.execute('''
+          CREATE TABLE exercises (
+            id TEXT PRIMARY KEY, name TEXT, sets INTEGER, reps INTEGER, 
+            weight REAL, setRpe TEXT, date TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE body_profile (
+            id INTEGER PRIMARY KEY, weight REAL, muscle_mass REAL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE workout_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sets INTEGER, 
+            reps INTEGER, weight REAL, rpe INTEGER, date TEXT
+          )
+        ''');
       },
     );
   }
