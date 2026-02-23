@@ -1,10 +1,18 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../features/home/presentation/home_screen.dart'; // Exercise 모델 공유를 위해
 
 // 운동 목록 상태를 관리하는 Notifier
 class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   WorkoutNotifier() : super([]) {
-    _loadRoutineByDay();
+    _init();
+  }
+
+  static const String _storageKey = 'saved_weekly_program';
+
+  Future<void> _init() async {
+    await _loadSavedProgram();
   }
 
   // AI 추천 보조 운동 목록을 별도로 관리
@@ -17,21 +25,55 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     state = [...state];
   }
 
-  // 현재 요일에 맞는 루틴 자동 로드 (기본 예시)
-  void _loadRoutineByDay() {
-    final now = DateTime.now();
-    final weekday = now.weekday; // 1: 월, 2: 화, ..., 7: 일
-
-    // TODO: DB나 설정에서 저장된 프로그램 타입을 가져오는 로직 필요
-    // 현재는 예시로 월/수/금은 5x5, 나머지는 휴식/커스텀으로 처리
-  }
-
   // 특정 프로그램의 요일별 전체 루틴 적용
   Map<int, List<Exercise>> _currentWeeklyRoutine = {};
 
-  void applyWeeklyProgram(Map<int, List<Exercise>> weeklyRoutine) {
+  Future<void> applyWeeklyProgram(Map<int, List<Exercise>> weeklyRoutine) async {
     _currentWeeklyRoutine = weeklyRoutine;
+    await _saveProgram(weeklyRoutine);
     updateRoutineByDay();
+  }
+
+  Future<void> _saveProgram(Map<int, List<Exercise>> weeklyRoutine) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Exercise를 JSON으로 직렬화하기 위해 Map으로 변환
+    final Map<String, dynamic> serializableMap = {};
+    weeklyRoutine.forEach((day, exercises) {
+      serializableMap[day.toString()] = exercises.map((e) => {
+        'id': e.id,
+        'name': e.name,
+        'sets': e.sets,
+        'reps': e.reps,
+        'weight': e.weight,
+      }).toList();
+    });
+    
+    await prefs.setString(_storageKey, jsonEncode(serializableMap));
+  }
+
+  Future<void> _loadSavedProgram() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedData = prefs.getString(_storageKey);
+    
+    if (savedData != null) {
+      final Map<String, dynamic> decoded = jsonDecode(savedData);
+      final Map<int, List<Exercise>> loadedRoutine = {};
+      
+      decoded.forEach((dayStr, exList) {
+        final day = int.parse(dayStr);
+        final exercises = (exList as List).map((item) => Exercise(
+          id: item['id'],
+          name: item['name'],
+          sets: item['sets'],
+          reps: item['reps'],
+          weight: (item['weight'] as num).toDouble(),
+        )).toList();
+        loadedRoutine[day] = exercises;
+      });
+      
+      _currentWeeklyRoutine = loadedRoutine;
+      updateRoutineByDay();
+    }
   }
 
   void updateRoutineByDay() {
