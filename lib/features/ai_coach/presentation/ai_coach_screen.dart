@@ -57,6 +57,8 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
         });
       }
     } catch (e) {
+      // 👇 이 줄을 추가해서 안드로이드 스튜디오 하단 Run(또는 Debug) 콘솔창에 진짜 에러를 출력합니다!
+      print('🚨🚨🚨 진짜 에러 원인: $e');
       setState(() {
         _messages.add({'role': 'assistant', 'content': '서버에 연결할 수 없습니다. Python 서버(main.py)가 켜져 있는지 확인해 주세요.'});
       });
