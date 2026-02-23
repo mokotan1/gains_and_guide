@@ -109,23 +109,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  void _toggleSetStatus(int exerciseIndex, int setIndex, List<Exercise> exercises) {
+  void _toggleSetStatus(int exerciseIndex, int setIndex, List<Exercise> exercises, {bool isAi = false}) {
     if (exercises[exerciseIndex].setStatus[setIndex]) {
-      ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, null);
+      ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, null, isAi: isAi);
     } else {
       // 유산소 타이머가 가동 중이면 근력 운동 자동 휴식 타이머 시작 차단
       if (_isResting && _isCardioTimer) {
-        ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, 5);
+        ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, 5, isAi: isAi);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('유산소 중에는 자동 휴식 타이머가 작동하지 않습니다.'))
         );
       } else {
-        _showRpeDialog(exerciseIndex, setIndex, exercises);
+        _showRpeDialog(exerciseIndex, setIndex, exercises, isAi: isAi);
       }
     }
   }
 
-  void _showRpeDialog(int exerciseIndex, int setIndex, List<Exercise> exercises) {
+  void _showRpeDialog(int exerciseIndex, int setIndex, List<Exercise> exercises, {bool isAi = false}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -141,7 +141,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 int rpe = index + 1;
                 return InkWell(
                   onTap: () {
-                    ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, rpe);
+                    ref.read(workoutProvider.notifier).toggleSet(exerciseIndex, setIndex, rpe, isAi: isAi);
                     _startTimerDirectly(isCardio: false);
                     Navigator.pop(context);
                   },
@@ -535,8 +535,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: isCardio 
-            ? _buildCardioCheck(exIndex, ex)
-            : _buildWeightTrainingCheck(exIndex, ex, list),
+            ? _buildCardioCheck(exIndex, ex, isAi: isAi)
+            : _buildWeightTrainingCheck(exIndex, ex, list, isAi: isAi),
         ),
       ],
     );
@@ -544,7 +544,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   int _selectedCardioMinutes = 30; // 유산소 기본 30분
 
-  Widget _buildCardioCheck(int exIndex, Exercise ex) {
+  Widget _buildCardioCheck(int exIndex, Exercise ex, {bool isAi = false}) {
     bool isDone = ex.setStatus[0];
     return Column(
       children: [
@@ -572,7 +572,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           onTap: () {
             setState(() {
               bool newStatus = !isDone;
-              ref.read(workoutProvider.notifier).toggleSet(exIndex, 0, newStatus ? 5 : null);
+              ref.read(workoutProvider.notifier).toggleSet(exIndex, 0, newStatus ? 5 : null, isAi: isAi);
               if (newStatus) {
                 // 유산소 전용 타이머 시작 (isCardio: true 전달)
                 _selectedRestTime = _selectedCardioMinutes * 60;
@@ -603,24 +603,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildWeightTrainingCheck(int exIndex, Exercise ex, List<Exercise> exercises) {
-    return Wrap(
-      spacing: 10, runSpacing: 10,
-      children: List.generate(ex.sets, (sIdx) {
-        bool isDone = ex.setStatus[sIdx];
-        return InkWell(
-          onTap: () => _toggleSetStatus(exIndex, sIdx, exercises),
-          child: Container(
-            width: 50, height: 50,
-            decoration: BoxDecoration(
-              color: isDone ? const Color(0xFF22C55E) : Colors.white,
-              border: Border.all(color: isDone ? const Color(0xFF22C55E) : Colors.grey[300]!),
-              shape: BoxShape.circle,
+  Widget _buildWeightTrainingCheck(int exIndex, Exercise ex, List<Exercise> exercises, {bool isAi = false}) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: const [
+            Text('세트', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+            Text('목표', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+            Text('완료', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ...List.generate(ex.sets, (sIdx) {
+          bool isDone = ex.setStatus[sIdx];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Text('${sIdx + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text('${ex.reps}회 / ${ex.weight}kg', style: const TextStyle(color: Colors.black87)),
+                InkWell(
+                  onTap: () => _toggleSetStatus(exIndex, sIdx, exercises, isAi: isAi),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: isDone ? const Color(0xFF22C55E) : Colors.white,
+                      border: Border.all(color: isDone ? const Color(0xFF22C55E) : Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: isDone ? const Icon(Icons.check, size: 20, color: Colors.white) : null,
+                  ),
+                ),
+              ],
             ),
-            child: Center(child: Text('${sIdx + 1}', style: TextStyle(color: isDone ? Colors.white : Colors.black54, fontWeight: FontWeight.bold))),
-          ),
-        );
-      }),
+          );
+        }),
+      ],
     );
   }
 }

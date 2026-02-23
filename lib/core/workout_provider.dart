@@ -40,7 +40,22 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   }
 
   // 세트 상태 업데이트
-  void toggleSet(int exIndex, int setIndex, int? rpe) {
+  void toggleSet(int exIndex, int setIndex, int? rpe, {bool isAi = false}) {
+    if (isAi) {
+      var newAi = [..._aiRecommendedExercises];
+      var ex = newAi[exIndex];
+      var newStatus = [...ex.setStatus];
+      var newRpe = [...ex.setRpe];
+
+      newStatus[setIndex] = !newStatus[setIndex];
+      newRpe[setIndex] = newStatus[setIndex] ? rpe : null;
+
+      newAi[exIndex] = ex.copyWith(setStatus: newStatus, setRpe: newRpe);
+      _aiRecommendedExercises = newAi;
+      state = [...state]; // Force UI update
+      return;
+    }
+
     var newState = [...state];
     var ex = newState[exIndex];
     var newStatus = [...ex.setStatus];
