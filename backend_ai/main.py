@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import os
 from groq import Groq
-import google.generativeai as genai
 from dotenv import load_dotenv
 import logging
 
@@ -14,22 +13,17 @@ load_dotenv()
 
 app = FastAPI()
 
-# API 키 설정
+# 1. GROQ_API_KEY 설정 및 클라이언트 생성
+# 렌더 환경변수나 .env 파일에 GROQ_API_KEY를 꼭 넣어주세요!
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
-# Groq 클라이언트 초기화 (Primary)
-groq_client = None
 if GROQ_API_KEY:
-    groq_client = Groq(api_key=GROQ_API_KEY)
-    logger.info("✅ Groq API Key가 로드되었습니다. (Llama 3 활성화)")
+    client = Groq(api_key=GROQ_API_KEY)
+    logger.info("✅ Groq API Key가 로드되었습니다. (Llama 3 활성화 완료)")
+else:
+    logger.error("❌ Groq API Key를 찾을 수 없습니다!")
+    client = None
 
-# Gemini 설정 (Fallback용)
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
-    logger.info("✅ Google API Key가 로드되었습니다. (Gemini 활성화)")
-
-# 페르소나 로드
+# 2. 페르소나 로드
 current_dir = os.path.dirname(os.path.abspath(__file__))
 persona_path = os.path.join(current_dir, "persona.txt")
 
@@ -48,43 +42,42 @@ class ChatRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "Gains & Guide AI (Groq + Gemini) Server is Running!"}
+    return {"status": "online", "message": "Gains & Guide AI Coach Server (Llama 3) is Running! 🏋️‍♂️"}
 
 @app.post("/chat")
 async def chat_with_coach(request: ChatRequest):
-    full_prompt = f"{SYSTEM_PROMPT}\n\n[사용자 정보]\n{request.context}\n\n[질문]\n{request.message}"
+    if not client:
+        logger.error("API Key 미설정 상태")
+        raise HTTPException(status_code=500, detail="서버에 Groq API 키가 없습니다.")
 
-    # 1순위: Groq (Llama 3 70B) 사용 - 초고속 응답
-    if groq_client:
-        try:
-            logger.info("🚀 Groq (Llama 3) 엔진으로 응답 생성 중...")
-            completion = groq_client.chat.completions.create(
-                model="llama3-70b-8192",
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": f"[데이터]\n{request.context}\n\n[질문]\n{request.message}"}
-                ],
-                temperature=0.7,
-                max_tokens=1024,
-            )
-            return {"response": completion.choices[0].message.content, "engine": "groq"}
-        except Exception as e:
-            logger.error(f"❌ Groq 오류 발생, Gemini로 전환합니다: {str(e)}")
+    try:
+        logger.info(f"요청 수신 - User: {request.user_id}, Message: {request.message[:20]}...")
 
-    # 2순위: Gemini (Fallback) 사용
-    if GOOGLE_API_KEY:
-        try:
-            logger.info("Fallback: Gemini 엔진으로 응답 생성 중...")
-            model = genai.GenerativeModel('gemini-1.5-flash-latest')
-            response = model.generate_content(full_prompt)
-            return {"response": response.text, "engine": "gemini"}
-        except Exception as e:
-            logger.error(f"❌ Gemini 오류 발생: {str(e)}")
-            raise HTTPException(status_code=500, detail="모든 AI 엔진이 응답하지 않습니다.")
+        # 3. Groq (Llama 3) 형식에 맞춰 메시지 조립
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"[과거 운동 기록]\n{request.context}\n\n[질문]\n{request.message}"}
+        ]
 
-    raise HTTPException(status_code=500, detail="API 키가 설정되지 않았습니다.")
+        chat_completion = client.chat.completions.create(
+            messages=messages,
+            model="llama-3.1-8b-instant", # 👈 "llama3-70b-8192" 대신 이 이름을 넣으세요!
+            temperature=0.7,
+            max_tokens=1024,
+        )
+
+        reply = chat_completion.choices[0].message.content
+
+        if not reply:
+            return {"response": "AI가 답변을 생성하지 못했습니다."}
+
+        return {"response": reply}
+
+    except Exception as e:
+        logger.exception("❌ 답변 생성 중 치명적 오류 발생:")
+        raise HTTPException(status_code=500, detail=f"AI 분석 중 오류가 발생했습니다: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)

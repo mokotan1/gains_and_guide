@@ -36,15 +36,16 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
 
     try {
       // ⚠️ 클라우드 서버 주소 반영
+      // 실제 배포된 클라우드 주소로 변경
       final response = await http.post(
         Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'user_id': 'master_user',
           'message': userMsg,
-          'context': contextData,
+          'context': contextData, // 이 데이터가 핵심입니다!
         }),
-      ).timeout(const Duration(seconds: 60));
+      ).timeout(const Duration(seconds: 60)); // 넉넉하게 60초 설정
 
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
