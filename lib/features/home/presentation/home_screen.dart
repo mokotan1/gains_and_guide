@@ -190,6 +190,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _showAddExerciseDialog() {
     final nameCont = TextEditingController();
     final weightCont = TextEditingController(text: '0.0');
+    final repsCont = TextEditingController(text: '10');
 
     showDialog(
       context: context,
@@ -216,6 +217,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: '무게 (kg)'),
               ),
+              TextField(
+                controller: repsCont,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '횟수 (회)'),
+              ),
             ],
           ),
           actions: [
@@ -226,6 +232,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   _addExercise(
                     name: nameCont.text,
                     weight: double.tryParse(weightCont.text) ?? 0,
+                    reps: int.tryParse(repsCont.text) ?? 10,
                     isBodyweight: _checkIsBodyweight(nameCont.text),
                     isCardio: _checkIsCardio(nameCont.text),
                   );
