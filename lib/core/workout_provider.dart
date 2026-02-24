@@ -6,10 +6,17 @@ import '../features/routine/domain/exercise.dart';
 
 class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   WorkoutNotifier() : super([]) {
-    _loadSavedProgram();
+    _init();
+  }
+
+  Future<void> _init() async {
+    await _loadSavedProgram();
+    // 현재 진행 중인 루틴이 있다면 덮어씌움 (앱 재시작 시 상태 유지)
+    await _loadCurrentRoutineFromPrefs();
   }
 
   static const String _storageKey = 'saved_weekly_program';
+  static const String _activeRoutineKey = 'current_active_routine';
   final Map<int, List<Exercise>> _currentWeeklyRoutine = {};
 
   Future<void> applyWeeklyProgram(Map<int, List<Exercise>> weeklyRoutine) async {
@@ -22,6 +29,7 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   void removeExercise(String id) async {
     await DatabaseHelper.instance.deleteExercise(id);
     state = state.where((ex) => ex.id != id).toList();
+    await _saveCurrentRoutineToPrefs();
   }
 
   void updateRoutineByDay() {
@@ -36,6 +44,7 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
       isBodyweight: ex.isBodyweight,
       isCardio: ex.isCardio,
     )).toList();
+    _saveCurrentRoutineToPrefs();
   }
 
   Future<void> _saveProgram(Map<int, List<Exercise>> routine) async {
@@ -57,7 +66,23 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
             .map((i) => Exercise.fromJson(i as Map<String, dynamic>))
             .toList();
       });
+      // 초기 로딩 시 오늘 루틴으로 설정
       updateRoutineByDay();
+    }
+  }
+
+  Future<void> _saveCurrentRoutineToPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = state.map((e) => e.toJson()).toList();
+    await prefs.setString(_activeRoutineKey, jsonEncode(data));
+  }
+
+  Future<void> _loadCurrentRoutineFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_activeRoutineKey);
+    if (saved != null) {
+      final List<dynamic> decoded = jsonDecode(saved);
+      state = decoded.map((i) => Exercise.fromJson(i as Map<String, dynamic>)).toList();
     }
   }
 
@@ -70,10 +95,12 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     newRpe[sIdx] = newStatus[sIdx] ? rpe : null;
     newState[exIdx] = ex.copyWith(setStatus: newStatus, setRpe: newRpe);
     state = newState;
+    _saveCurrentRoutineToPrefs();
   }
 
   void addExercise(Exercise ex) {
     state = [...state, ex];
+    _saveCurrentRoutineToPrefs();
   }
 
   Future<void> saveCurrentWorkoutToHistory() async {
@@ -97,6 +124,9 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
     if (historyData.isNotEmpty) {
       await DatabaseHelper.instance.saveWorkoutHistory(historyData);
+      // 저장 후 현재 루틴 상태 초기화 (옵션: 필요 시)
+      // state = []; 
+      // await _saveCurrentRoutineToPrefs();
     }
   }
 }
