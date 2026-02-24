@@ -4,6 +4,7 @@ import os
 from groq import Groq
 from dotenv import load_dotenv
 import logging
+import json
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -13,8 +14,7 @@ load_dotenv()
 
 app = FastAPI()
 
-# 1. GROQ_API_KEY 설정 및 클라이언트 생성
-# 렌더 환경변수나 .env 파일에 GROQ_API_KEY를 꼭 넣어주세요!
+# 1. GROQ_API_KEY 설정
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if GROQ_API_KEY:
     client = Groq(api_key=GROQ_API_KEY)
@@ -42,18 +42,14 @@ class ChatRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "Gains & Guide AI Coach Server (Llama 3) is Running! 🏋️‍♂️"}
+    return {"status": "online", "message": "Gains & Guide AI Coach Server is Running!"}
 
 @app.post("/chat")
 async def chat_with_coach(request: ChatRequest):
     if not client:
-        logger.error("API Key 미설정 상태")
         raise HTTPException(status_code=500, detail="서버에 Groq API 키가 없습니다.")
 
     try:
-        logger.info(f"요청 수신 - User: {request.user_id}, Message: {request.message[:20]}...")
-
-        # 3. Groq (Llama 3) 형식에 맞춰 메시지 조립
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"[과거 운동 기록]\n{request.context}\n\n[질문]\n{request.message}"}
@@ -61,21 +57,29 @@ async def chat_with_coach(request: ChatRequest):
 
         chat_completion = client.chat.completions.create(
             messages=messages,
-            model="llama-3.1-8b-instant", # 👈 "llama3-70b-8192" 대신 이 이름을 넣으세요!
+            model="llama-3.1-8b-instant",
             temperature=0.7,
             max_tokens=1024,
+            response_format={"type": "json_object"}
         )
 
         reply = chat_completion.choices[0].message.content
 
-        if not reply:
-            return {"response": "AI가 답변을 생성하지 못했습니다."}
+        try:
+            parsed_reply = json.loads(reply)
+            text_response = parsed_reply.get("response") or parsed_reply.get("message") or "답변 내용을 찾을 수 없습니다."
 
-        return {"response": reply}
+            return {
+                "response": text_response,
+                # 👇 루틴 객체를 그대로 반환
+                "routine": parsed_reply.get("routine")
+            }
+        except json.JSONDecodeError:
+            return {"response": reply, "routine": None}
 
     except Exception as e:
-        logger.exception("❌ 답변 생성 중 치명적 오류 발생:")
-        raise HTTPException(status_code=500, detail=f"AI 분석 중 오류가 발생했습니다: {str(e)}")
+        logger.exception("❌ 답변 생성 중 오류 발생:")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
