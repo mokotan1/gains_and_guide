@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../../core/workout_provider.dart';
 import '../../routine/domain/exercise.dart';
+import '../../../core/database/database_helper.dart';
 
 class AICoachScreen extends ConsumerStatefulWidget {
   const AICoachScreen({super.key});
@@ -34,10 +35,19 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
       _messageController.clear();
     });
 
-    final exercises = ref.read(workoutProvider);
-    String contextData = exercises.map((e) =>
-    "${e.name}: ${e.weight}kg x ${e.sets}세트 (RPE: ${e.setRpe.join(',')})"
-    ).join('\n');
+    // 💡 [핵심 수정] 빈 현재 상태가 아니라, DB에서 진짜 '과거 운동 기록'을 가져옵니다.
+    final history = await DatabaseHelper.instance.getAllHistory();
+    String contextData = "과거 운동 기록:\n";
+
+    if (history.isEmpty) {
+      contextData = "아직 저장된 과거 운동 기록이 없습니다. 오늘이 첫 운동입니다.";
+    } else {
+      // 너무 많은 데이터 전송을 막기 위해 최근 20개 세트 기록만 전달
+      for (var h in history.take(20)) {
+        String date = h['date'].toString().split(' ')[0]; // 날짜 부분만 추출
+        contextData += "$date - ${h['name']}: ${h['weight']}kg x ${h['reps']}회 (${h['sets']}세트) RPE:${h['rpe']}\n";
+      }
+    }
 
     try {
       final response = await http.post(
@@ -46,7 +56,7 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
         body: jsonEncode({
           'user_id': 'master_user',
           'message': userMsg,
-          'context': contextData,
+          'context': contextData, // 👈 실제 DB 기록이 AI에게 전달됨
         }),
       ).timeout(const Duration(seconds: 60));
 
@@ -55,8 +65,8 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
         setState(() {
           _messages.add({
             'role': 'assistant',
-            'content': data['response'] ?? data['message'] ?? '답변을 불러올 수 없습니다.',
-            'routine': data['routine'], // 추천 루틴 데이터 받기
+            'content': data['response'] ?? '답변을 불러올 수 없습니다.',
+            'routine': data['routine'],
           });
         });
       } else {
@@ -100,6 +110,8 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
       ),
     );
   }
+
+
 
   @override
   Widget build(BuildContext context) {
