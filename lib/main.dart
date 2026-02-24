@@ -58,7 +58,12 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
+      // 💡 [핵심 수정] 기존의 body: _screens[_selectedIndex] 를 아래처럼 IndexedStack으로 감싸줍니다.
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _screens,
+      ),
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
