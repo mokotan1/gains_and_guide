@@ -190,6 +190,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _showAddExerciseDialog() {
     final nameCont = TextEditingController();
     final weightCont = TextEditingController(text: '0.0');
+    final setsCont = TextEditingController(text: '3');
     final repsCont = TextEditingController(text: '10');
 
     showDialog(
@@ -197,32 +198,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('새 운동 추가'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCont,
-                decoration: const InputDecoration(labelText: '운동 이름'),
-                onChanged: (val) async {
-                  if (_checkIsBodyweight(val)) {
-                    final profile = await DatabaseHelper.instance.getProfile();
-                    if (profile != null) {
-                      setDialogState(() => weightCont.text = profile['weight'].toString());
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCont,
+                  decoration: const InputDecoration(labelText: '운동 이름'),
+                  onChanged: (val) async {
+                    if (_checkIsBodyweight(val)) {
+                      final profile = await DatabaseHelper.instance.getProfile();
+                      if (profile != null) {
+                        setDialogState(() => weightCont.text = profile['weight'].toString());
+                      }
                     }
-                  }
-                },
-              ),
-              TextField(
-                controller: weightCont,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: '무게 (kg)'),
-              ),
-              TextField(
-                controller: repsCont,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: '횟수 (회)'),
-              ),
-            ],
+                  },
+                ),
+                TextField(
+                  controller: weightCont,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: '무게 (kg)'),
+                ),
+                TextField(
+                  controller: setsCont,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: '세트 (세트)'),
+                ),
+                TextField(
+                  controller: repsCont,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: '횟수 (회)'),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
@@ -232,6 +240,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   _addExercise(
                     name: nameCont.text,
                     weight: double.tryParse(weightCont.text) ?? 0,
+                    sets: int.tryParse(setsCont.text) ?? 3,
                     reps: int.tryParse(repsCont.text) ?? 10,
                     isBodyweight: _checkIsBodyweight(nameCont.text),
                     isCardio: _checkIsCardio(nameCont.text),
