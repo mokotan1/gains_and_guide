@@ -99,7 +99,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // 디버그용 CSV 로그 표기가 제거된 결과창
   void _showAiResultDialog(String response) {
     showDialog(
       context: context,
@@ -118,7 +117,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // --- 핵심 정산 및 분석 로직 ---
+  // --- 핵심 정산 및 분석 로직 (수정된 부분) ---
   void _processAiRecommendation(List<Exercise> currentExercises) async {
     _showLoadingDialog();
     try {
@@ -137,7 +136,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'user_id': 'master_user',
-          'message': '$pInfo 오늘 운동 기록을 분석하고 증량 가이드를 줘.',
+          'message': '$pInfo 오늘 운동 기록을 분석하고 증량 가이드 데이터를 포함해서 줘.',
           'context': fullCsv,
         }),
       ).timeout(const Duration(seconds: 60));
@@ -147,7 +146,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
-        ref.read(workoutProvider.notifier).finishWorkout(); // 전역 정산 상태 true 설정
+
+        // [핵심 추가] AI가 제안한 증량 데이터를 실제 주간 루틴에 자동 반영
+        if (data['progression'] != null) {
+          await ref.read(workoutProvider.notifier).applyProgression(data['progression']);
+        }
+
+        ref.read(workoutProvider.notifier).finishWorkout();
         _showAiResultDialog(data['response']);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -155,7 +160,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       }
     } catch (e) {
-      if (mounted) Navigator.pop(context); // 에러 발생 시 로딩창 반드시 닫기
+      if (mounted) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('정산 중 오류가 발생했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
       );
