@@ -23,7 +23,7 @@ class AppTheme {
       bodyLarge: TextStyle(color: Colors.black),
       bodyMedium: TextStyle(color: Colors.black87),
     ),
-    // [수정된 부분] CardTheme -> CardThemeData
+    // 💡 [핵심 수정] CardTheme(X) -> CardThemeData(O)
     cardTheme: CardThemeData(
       color: Colors.white,
       elevation: 2,
@@ -53,7 +53,7 @@ class AppTheme {
       secondary: Color(0xFF03DAC6),
       surface: Color(0xFF1E1E1E),
     ),
-    // 다크 모드에서도 카드 스타일을 맞추고 싶다면 아래를 추가하세요
+    // 💡 [핵심 수정] CardTheme(X) -> CardThemeData(O)
     cardTheme: CardThemeData(
       color: const Color(0xFF1E1E1E),
       elevation: 2,

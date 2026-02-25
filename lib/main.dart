@@ -9,10 +9,11 @@ import 'package:gains_and_guide/features/home/presentation/body_profile_screen.d
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final androidConfig = FlutterBackgroundAndroidConfig(
+  // 💡 [핵심 수정] Default -> normal 로 변경하면 에러가 사라집니다.
+  const androidConfig = FlutterBackgroundAndroidConfig(
     notificationTitle: "Gains & Guide",
     notificationText: "운동 타이머가 백그라운드에서 실행 중입니다.",
-    notificationImportance: AndroidNotificationImportance.Default,
+    notificationImportance: AndroidNotificationImportance.normal,
     notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
   );
 
@@ -40,7 +41,8 @@ class MyApp extends StatelessWidget {
           bodyMedium: TextStyle(color: Colors.black),
           titleLarge: TextStyle(color: Colors.black),
         ),
-        cardTheme: CardThemeData(
+        // 💡 [확인] 이곳도 CardThemeData로 되어 있는지 확인하세요.
+        cardTheme: const CardThemeData(
           color: Colors.white,
           elevation: 2.0,
           surfaceTintColor: Colors.white,
@@ -71,12 +73,10 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 💡 [핵심 수정] 기존의 body: _screens[_selectedIndex] 를 아래처럼 IndexedStack으로 감싸줍니다.
       body: IndexedStack(
         index: _selectedIndex,
         children: _screens,
       ),
-
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
