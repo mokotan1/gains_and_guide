@@ -9,7 +9,7 @@ import 'package:gains_and_guide/features/home/presentation/body_profile_screen.d
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  const androidConfig = FlutterBackgroundAndroidConfig(
+  final androidConfig = FlutterBackgroundAndroidConfig(
     notificationTitle: "Gains & Guide",
     notificationText: "운동 타이머가 백그라운드에서 실행 중입니다.",
     notificationImportance: AndroidNotificationImportance.Default,
@@ -40,7 +40,7 @@ class MyApp extends StatelessWidget {
           bodyMedium: TextStyle(color: Colors.black),
           titleLarge: TextStyle(color: Colors.black),
         ),
-        cardTheme: const CardThemeData(
+        cardTheme: CardThemeData(
           color: Colors.white,
           elevation: 2.0,
           surfaceTintColor: Colors.white,
