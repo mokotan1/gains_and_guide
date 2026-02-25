@@ -143,11 +143,34 @@ class ProgramSelectionScreen extends ConsumerWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
+                      final history = await DatabaseHelper.instance.getAllHistory();
+                      final today = DateTime.now().toString().split(' ')[0];
+                      final didWorkoutToday = history.any((h) => h['date'].toString().startsWith(today));
+
+                      if (didWorkoutToday && context.mounted) {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('운동 완료'),
+                            content: const Text('오늘은 이미 운동을 완료하셨습니다. 내일 다시 시도해 주세요!'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('확인'),
+                              ),
+                            ],
+                          ),
+                        );
+                        return;
+                      }
+
                       ref.read(workoutProvider.notifier).applyWeeklyProgram(program.weeklyExercises);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('${program.title} 요일별 자동 루틴이 설정되었습니다!'), backgroundColor: program.color),
-                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('${program.title} 요일별 자동 루틴이 설정되었습니다!'), backgroundColor: program.color),
+                        );
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: program.color,

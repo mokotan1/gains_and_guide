@@ -1,11 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_background/flutter_background.dart';
 import 'package:gains_and_guide/features/home/presentation/home_screen.dart';
 import 'package:gains_and_guide/features/routine/presentation/program_selection_screen.dart';
 import 'package:gains_and_guide/features/ai_coach/presentation/ai_coach_screen.dart';
 import 'package:gains_and_guide/features/home/presentation/body_profile_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  const androidConfig = FlutterBackgroundAndroidConfig(
+    notificationTitle: "Gains & Guide",
+    notificationText: "운동 타이머가 백그라운드에서 실행 중입니다.",
+    notificationImportance: AndroidNotificationImportance.Default,
+    notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
+  );
+
+  await FlutterBackground.initialize(androidConfig: androidConfig);
+  await FlutterBackground.enableBackgroundExecution();
+
   runApp(const ProviderScope(child: MyApp()));
 }
 

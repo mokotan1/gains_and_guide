@@ -142,23 +142,32 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     final routine = _currentWeeklyRoutine[weekday] ?? [];
 
     if (routine.isNotEmpty) {
-      state = routine.map((ex) => Exercise.initial(
-        id: ex.id,
-        name: ex.name,
-        sets: ex.sets,
-        reps: ex.reps,
-        weight: ex.weight,
-        isBodyweight: ex.isBodyweight,
-        isCardio: ex.isCardio,
-      )).toList();
+      final List<Exercise> updatedRoutine = [];
+      for (var ex in routine) {
+        final latestWeight = await DatabaseHelper.instance.getLatestWeight(ex.name);
+        updatedRoutine.add(ex.copyWith(
+          weight: latestWeight ?? ex.weight,
+          setStatus: List.filled(ex.sets, false),
+          setRpe: List.filled(ex.sets, null),
+        ));
+      }
+      state = updatedRoutine;
     } else if (weekday == 1 || weekday == 3 || weekday == 5) {
       final history = await DatabaseHelper.instance.getAllHistory();
+      final List<Exercise> baseRoutine;
       if (history.isEmpty) {
-        state = _getWorkoutA();
+        baseRoutine = _getWorkoutA();
       } else {
         final lastB = history.first['name'] == '오버헤드 프레스 (OHP)' || history.first['name'] == '컨벤셔널 데드리프트';
-        state = lastB ? _getWorkoutA() : _getWorkoutB();
+        baseRoutine = lastB ? _getWorkoutA() : _getWorkoutB();
       }
+
+      final List<Exercise> updatedRoutine = [];
+      for (var ex in baseRoutine) {
+        final latestWeight = await DatabaseHelper.instance.getLatestWeight(ex.name);
+        updatedRoutine.add(ex.copyWith(weight: latestWeight ?? ex.weight));
+      }
+      state = updatedRoutine;
     } else {
       state = [];
     }
@@ -182,16 +191,37 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     final List<Map<String, dynamic>> historyData = [];
 
     for (var ex in state) {
+      int countBelow3 = 0;
+      int countBelow8 = 0;
+      int completedSets = 0;
+
       for (int i = 0; i < ex.sets; i++) {
         if (ex.setStatus[i]) {
+          completedSets++;
+          int rpe = ex.setRpe[i] ?? 8;
+          if (rpe < 3) countBelow3++;
+          if (rpe < 8) countBelow8++;
+
           historyData.add({
             'name': ex.name,
             'sets': i + 1,
             'reps': ex.reps,
             'weight': ex.weight,
-            'rpe': ex.setRpe[i] ?? 8,
+            'rpe': rpe,
             'date': now,
           });
+        }
+      }
+
+      // 증량 로직: 5세트 운동 기준 (또는 완료된 세트 기준)
+      if (completedSets > 0 && !ex.isCardio) {
+        double newWeight = ex.weight;
+        if (countBelow3 >= 5) {
+          newWeight += 5.0;
+          await DatabaseHelper.instance.saveProgression(ex.name, newWeight);
+        } else if (countBelow8 >= 5) {
+          newWeight += 2.5;
+          await DatabaseHelper.instance.saveProgression(ex.name, newWeight);
         }
       }
     }

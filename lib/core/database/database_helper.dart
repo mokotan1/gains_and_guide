@@ -17,7 +17,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 2, // 버전을 2로 변경
+      version: 3, // 버전을 3으로 변경
       onCreate: _createDB,
       onUpgrade: _upgradeDB, // 업그레이드 로직 추가
     );
@@ -42,12 +42,17 @@ class DatabaseHelper {
         reps INTEGER, weight REAL, rpe INTEGER, date TEXT
       )
     ''');
+    await db.execute('''
+      CREATE TABLE progression_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, 
+        weight REAL, date TEXT
+      )
+    ''');
   }
 
   // 이미 설치된 상태에서 버전이 올라갔을 때 호출
   Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // 기존에 workout_history 테이블이 없었다면 생성합니다.
       await db.execute('''
         CREATE TABLE IF NOT EXISTS workout_history (
           id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sets INTEGER, 
@@ -55,6 +60,36 @@ class DatabaseHelper {
         )
       ''');
     }
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS progression_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, 
+          weight REAL, date TEXT
+        )
+      ''');
+    }
+  }
+
+  // 증량 기록 저장 및 최신 무게 가져오기
+  Future<void> saveProgression(String name, double weight) async {
+    final db = await instance.database;
+    await db.insert('progression_history', {
+      'name': name,
+      'weight': weight,
+      'date': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<double?> getLatestWeight(String name) async {
+    final db = await instance.database;
+    final res = await db.query(
+      'progression_history',
+      where: 'name = ?',
+      whereArgs: [name],
+      orderBy: 'date DESC',
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first['weight'] as double : null;
   }
 
   // 운동 삭제
