@@ -43,7 +43,7 @@ try:
         with open(exercises_json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             exercises = data.get("exercises", [])
-            
+
             # primary_muscles 기준으로 그룹화
             grouped = {}
             for ex in exercises:
@@ -53,11 +53,11 @@ try:
                     if muscle not in grouped:
                         grouped[muscle] = []
                     grouped[muscle].append(name)
-            
+
             # 텍스트 생성
             catalog_lines = ["[Available Exercise Catalog]"]
             for muscle, names in grouped.items():
-                catalog_lines.append(f"{muscle}: {', '.join(names)}")
+                catalog_lines.append(f"- {muscle}: {', '.join(names)}")
             exercise_catalog_text = "\n".join(catalog_lines)
             logger.info("✅ 운동 카탈로그를 성공적으로 로드하고 그룹화했습니다.")
     else:
@@ -82,7 +82,19 @@ async def chat_with_coach(request: ChatRequest):
     try:
         full_system_prompt = SYSTEM_PROMPT
         if exercise_catalog_text:
-            full_system_prompt += f"\n\n{exercise_catalog_text}"
+            # 👇 핵심 추가: AI가 한국어 부위를 영어 카탈로그와 매칭할 수 있도록 번역/매칭 가이드 주입
+            korean_mapping_guide = (
+                "\n\n[부위 매칭 참고 가이드]\n"
+                "사용자가 한국어로 특정 부위를 요청하면 아래 영어 부위명과 매칭하여 카탈로그에서 운동을 찾으세요:\n"
+                "- 등: lats, middle back, lower back\n"
+                "- 이두: biceps\n"
+                "- 가슴: chest\n"
+                "- 어깨: shoulders\n"
+                "- 하체: quadriceps, hamstrings, glutes, calves\n"
+                "- 삼두: triceps\n"
+                "- 복근: abs\n"
+            )
+            full_system_prompt += f"{korean_mapping_guide}\n{exercise_catalog_text}"
 
         messages = [
             {"role": "system", "content": full_system_prompt},
@@ -105,7 +117,6 @@ async def chat_with_coach(request: ChatRequest):
 
             return {
                 "response": text_response,
-                # 👇 루틴 객체를 그대로 반환
                 "routine": parsed_reply.get("routine")
             }
         except json.JSONDecodeError:
