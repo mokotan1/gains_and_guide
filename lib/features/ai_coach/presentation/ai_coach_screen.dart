@@ -46,15 +46,51 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
     } finally { if (mounted) setState(() => _isLoading = false); }
   }
 
-  void _applyRoutine(Map<String, dynamic> routine) {
+  Future<void> _applyRoutine(Map<String, dynamic> routine) async {
     final list = routine['exercises'] as List<dynamic>? ?? [];
-    final newExs = list.asMap().entries.map((entry) => Exercise.initial(
-      id: '${DateTime.now().millisecondsSinceEpoch}_${entry.key}',
-      name: entry.value['name'], sets: entry.value['sets'], reps: entry.value['reps'], weight: (entry.value['weight']).toDouble(),
-    )).toList();
+    List<Exercise> newExs = [];
 
-    ref.read(workoutProvider.notifier).replaceRecommendedExercises(newExs);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('🔥 루틴이 교체되었습니다!'), backgroundColor: Colors.blueAccent));
+    for (var i = 0; i < list.length; i++) {
+      final entry = list[i];
+      final String name = entry['name'];
+      
+      // DB에서 카탈로그 정보 검색
+      final results = await DatabaseHelper.instance.searchCatalogExercises(name);
+      
+      if (results.isNotEmpty) {
+        // 정확히 일치하는 이름을 찾거나, 첫 번째 결과 사용
+        final catalog = results.firstWhere(
+          (e) => e.name.toLowerCase() == name.toLowerCase(),
+          orElse: () => results.first,
+        );
+        
+        newExs.add(Exercise.initial(
+          id: '${DateTime.now().millisecondsSinceEpoch}_$i',
+          name: catalog.name, // DB의 정확한 이름 사용
+          sets: entry['sets'],
+          reps: entry['reps'],
+          weight: (entry['weight'] ?? 0).toDouble(),
+        ));
+      } else {
+        // DB에 없으면 AI가 준 이름 그대로 생성
+        newExs.add(Exercise.initial(
+          id: '${DateTime.now().millisecondsSinceEpoch}_$i',
+          name: name,
+          sets: entry['sets'],
+          reps: entry['reps'],
+          weight: (entry['weight'] ?? 0).toDouble(),
+        ));
+      }
+    }
+
+    if (newExs.isNotEmpty) {
+      ref.read(workoutProvider.notifier).replaceRecommendedExercises(newExs);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('🔥 루틴이 교체되었습니다!'), backgroundColor: Colors.blueAccent),
+        );
+      }
+    }
   }
 
   @override
