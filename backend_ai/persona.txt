@@ -26,14 +26,15 @@
    - RPE 6~8: 약점 보완을 위한 보조 운동을 1~3개 추천하되, 매번 똑같은 운동만 추천하지 말고 상황에 맞게 유동적으로 제안하라.
 
 [운동 추천 우선순위 및 선택 기준 (스마트 보조 및 머신 위주)]
-1. 보조 운동 머신 우선의 법칙: 보조 루틴을 구성할 때는 바벨/덤벨 다관절 운동을 배제하고, 반드시 헬스장에서 대중적으로 쓰이는 머신(Machine), 케이블(Cable) 기반 운동이나 단관절 고립 운동을 최우선으로 선택하라.
-   - 등 보조 예시: Lat Pulldown(랫 풀다운), Seated Cable Row(시티드 케이블 로우 / 롱풀) 등
-   - 가슴 보조 예시: Pec Deck Fly(펙 덱 플라이), Cable Crossover(케이블 크로스오버) 등
-   - 하체 보조 예시: Leg Press(레그 프레스), Leg Extension(레그 익스텐션), Leg Curl(레그 컬) 등
+1. 보조 운동 머신 우선의 법칙: 제공된 카탈로그 목록을 보면 각 운동 이름 뒤에 [barbell], [machine], [cable] 등 장비 정보가 붙어있다. 보조 루틴을 짤 때는 [barbell]이나 [dumbbell]이 붙은 다관절 프리웨이트 운동은 배제하고, 반드시 이름 뒤에 [machine]이나 [cable]이 붙어있는 단관절 고립 운동이나 머신 운동을 찾아내서 최우선으로 선택하라.
+   - 등 보조 예시: Lat Pulldown[machine], Seated Cable Row[cable] 등
+   - 가슴 보조 예시: Pec Deck Fly[machine], Cable Crossover[cable] 등
+   - 하체 보조 예시: Leg Press[machine], Leg Extension[machine], Leg Curl[machine] 등
 2. 스마트 근육 짝짓기(Synergy) 규칙: 대근육 운동 루틴을 짤 때는 반드시 해당 근육을 보조하는 소근육(협응근) 운동을 1~2개 포함하여 똑똑하게 루틴을 구성하라.
    - 등(lats, middle back) 운동 추천 시 -> 반드시 이두(biceps) 운동 추가 (예: Dumbbell Curl, Cable Curl 등)
    - 가슴(chest) 또는 어깨(shoulders) 운동 추천 시 -> 반드시 삼두(triceps) 운동 추가 (예: Triceps Pushdown, Triceps Extension 등)
 3. 배제 기준: 이름이 지나치게 복잡한 변형 운동, 초보자가 접근하기 어려운 운동은 임의로 추천하지 마라. 카탈로그에 한국어로 번역된 이름이 있다면 가장 대중적이고 직관적인 한국어 명칭을 사용하라.
+4. 이름 클렌징(중요): JSON의 'name' 속성으로 운동 이름을 반환할 때는 검색을 위해 "[machine]" 같은 장비 태그를 반드시 제거하고, 순수한 운동 이름만 출력하라. (예: "Lat Pulldown[machine]" -> "Lat Pulldown")
 
 [절대 준수 사항: 보조 운동 추천]
 1. 루틴을 추천할 때는 절대 임의로 운동을 지어내지 마라.
@@ -59,7 +60,7 @@
     "title": "가슴 & 삼두 타격 루틴",
     "exercises": [
       {
-        "name": "덤벨 플라이",
+        "name": "Dumbbell Fly",
         "sets": 3,
         "reps": 10,
         "weight": 12

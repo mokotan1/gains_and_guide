@@ -44,22 +44,32 @@ try:
             data = json.load(f)
             exercises = data.get("exercises", [])
 
-            # primary_muscles 기준으로 그룹화
+            # primary_muscles 기준으로 그룹화 + 장비(equipment) 정보 추가
             grouped = {}
             for ex in exercises:
                 muscles = ex.get("primary_muscles", ["unknown"])
                 name = ex.get("name", "Unknown Exercise")
+                # 장비 정보 가져오기 (리스트일 경우 첫 번째 값 또는 문자열)
+                equipment = ex.get("equipment", ["none"])
+                if isinstance(equipment, list) and len(equipment) > 0:
+                    eq_str = equipment[0]
+                else:
+                    eq_str = str(equipment)
+
+                # 이름 뒤에 [장비] 태그 붙이기 (예: Lat Pulldown[machine])
+                entry = f"{name}[{eq_str}]"
+
                 for muscle in muscles:
                     if muscle not in grouped:
                         grouped[muscle] = []
-                    grouped[muscle].append(name)
+                    grouped[muscle].append(entry)
 
             # 텍스트 생성
             catalog_lines = ["[Available Exercise Catalog]"]
             for muscle, names in grouped.items():
                 catalog_lines.append(f"- {muscle}: {', '.join(names)}")
             exercise_catalog_text = "\n".join(catalog_lines)
-            logger.info("✅ 운동 카탈로그를 성공적으로 로드하고 그룹화했습니다.")
+            logger.info("✅ 운동 카탈로그(장비 정보 포함)를 성공적으로 로드했습니다.")
     else:
         logger.warning(f"⚠️ {exercises_json_path} 파일이 없어 카탈로그를 로드하지 못했습니다.")
 except Exception as e:
