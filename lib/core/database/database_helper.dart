@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import '../../features/routine/domain/exercise_catalog.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -8,7 +9,6 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    // 버전을 1에서 2로 올립니다.
     _database = await _initDB('gains_v5.db');
     return _database!;
   }
@@ -17,9 +17,9 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 3, // 버전을 3으로 변경
+      version: 4, // 버전을 3에서 4로 올림
       onCreate: _createDB,
-      onUpgrade: _upgradeDB, // 업그레이드 로직 추가
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -48,6 +48,21 @@ class DatabaseHelper {
         weight REAL, date TEXT
       )
     ''');
+    // exercise_catalog 테이블 생성
+    await _createExerciseCatalogTable(db);
+  }
+
+  Future _createExerciseCatalogTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE exercise_catalog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        category TEXT,
+        equipment TEXT,
+        primary_muscles TEXT,
+        instructions TEXT
+      )
+    ''');
   }
 
   // 이미 설치된 상태에서 버전이 올라갔을 때 호출
@@ -68,6 +83,37 @@ class DatabaseHelper {
         )
       ''');
     }
+    if (oldVersion < 4) {
+      await _createExerciseCatalogTable(db);
+    }
+  }
+
+  // 운동 카탈로그 시딩
+  Future<void> seedExerciseCatalog(List<Map<String, dynamic>> exercises) async {
+    final db = await instance.database;
+    final batch = db.batch();
+    for (var exercise in exercises) {
+      batch.insert('exercise_catalog', exercise);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  // 운동 카탈로그가 비어있는지 확인
+  Future<bool> isExerciseCatalogEmpty() async {
+    final db = await instance.database;
+    final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM exercise_catalog'));
+    return count == 0;
+  }
+
+  // 운동 카탈로그 검색
+  Future<List<ExerciseCatalog>> searchCatalogExercises(String keyword) async {
+    final db = await instance.database;
+    final res = await db.query(
+      'exercise_catalog',
+      where: 'name LIKE ?',
+      whereArgs: ['%$keyword%'],
+    );
+    return res.map((map) => ExerciseCatalog.fromMap(map)).toList();
   }
 
   // 증량 기록 저장 및 최신 무게 가져오기
