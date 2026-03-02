@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/routine/domain/exercise.dart';
 import '../features/routine/application/workout_service.dart';
+import 'database/database_helper.dart'; // DB 기록 조회를 위해 추가
 
 class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   final WorkoutService _service;
@@ -101,7 +102,12 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
   Future<void> updateRoutineByDay() async {
     final weekday = DateTime.now().weekday;
-    final routine = _currentWeeklyRoutine[weekday] ?? [];
+    List<Exercise> routine = _currentWeeklyRoutine[weekday] ?? [];
+
+    // [수정 1] 백 스쿼트가 포함된 루틴이라면, 요일 무시하고 이전 운동 기록을 기반으로 A/B 코스 결정
+    if (routine.isNotEmpty && routine.any((e) => e.name == '백 스쿼트')) {
+      routine = await _getSmartStrongliftsRoutine(routine);
+    }
 
     if (routine.isNotEmpty) {
       final List<Exercise> updatedRoutine = [];
@@ -114,14 +120,52 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
         ));
       }
       state = updatedRoutine;
-    } else if (weekday == 1 || weekday == 3 || weekday == 5) {
-      // 5x5 기본 루틴 로직 (필요 시 유지)
-      // 이 부분은 Service로 옮기거나 명확히 관리하는 게 좋음
-      state = []; // 일단 빈 루틴으로 처리하거나 기존 로직 유지
     } else {
       state = [];
     }
     _saveCurrentSession();
+  }
+
+  // [기록 기반 A/B 코스 교차 로직 함수]
+  Future<List<Exercise>> _getSmartStrongliftsRoutine(List<Exercise> defaultRoutine) async {
+    final history = await DatabaseHelper.instance.getAllHistory();
+
+    if (history.isEmpty) return defaultRoutine; // 기록 없으면 기본값
+
+    // 가장 최근 운동 날짜 찾기
+    final lastDate = history.first['date'].toString().split(' ')[0];
+
+    // 가장 최근 운동 날짜에 수행한 운동 이름들 수집
+    final lastExercises = history
+        .where((h) => h['date'].toString().startsWith(lastDate))
+        .map((h) => h['name'].toString())
+        .toSet();
+
+    // A코스 정의 (스쿼트, 벤치, 로우)
+    final routineA = [
+      Exercise.initial(id: 's1_a', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
+      Exercise.initial(id: 's2_a', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 80),
+      Exercise.initial(id: 's3_a', name: '펜들레이 로우', sets: 5, reps: 5, weight: 80),
+    ];
+
+    // B코스 정의 (스쿼트, OHP, 데드리프트)
+    final routineB = [
+      Exercise.initial(id: 's1_b', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
+      Exercise.initial(id: 's4_b', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 55),
+      Exercise.initial(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 145),
+    ];
+
+    // 마지막으로 '플랫 벤치 프레스'를 했다면 (A코스를 했음) -> 오늘은 B코스
+    if (lastExercises.contains('플랫 벤치 프레스')) {
+      return routineB;
+    }
+    // 마지막으로 '오버헤드 프레스 (OHP)'를 했다면 (B코스를 했음) -> 오늘은 A코스
+    else if (lastExercises.contains('오버헤드 프레스 (OHP)')) {
+      return routineA;
+    }
+
+    // 판단 불가 시 지정된 기본 루틴 반환
+    return defaultRoutine;
   }
 
   Future<void> saveCurrentWorkoutToHistory() async {
@@ -153,10 +197,12 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
       if (completedSets > 0 && !ex.isCardio) {
         double newWeight = ex.weight;
-        if (countBelow3 >= 5) {
+        // [수정 2] 증량 조건을 5고정에서, 운동의 목표 세트 수(ex.sets)로 변경
+        // 이렇게 하면 1세트인 데드리프트나 3세트인 보조 운동도 기록이 정상 저장됩니다.
+        if (countBelow3 >= ex.sets) {
           newWeight += 5.0;
           await _service.saveProgression(ex.name, newWeight);
-        } else if (countBelow8 >= 5) {
+        } else if (countBelow8 >= ex.sets) {
           newWeight += 2.5;
           await _service.saveProgression(ex.name, newWeight);
         }
