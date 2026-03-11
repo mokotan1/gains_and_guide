@@ -169,7 +169,7 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   }
 
   Future<void> saveCurrentWorkoutToHistory() async {
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toString().split(' ')[0]; // YYYY-MM-DD로 통일
     final List<Map<String, dynamic>> historyData = [];
 
     for (var ex in state) {
