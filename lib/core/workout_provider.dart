@@ -100,8 +100,7 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   }
 
   Future<void> updateRoutineByDay() async {
-    final weekday = DateTime.now().weekday;
-    final routine = _currentWeeklyRoutine[weekday] ?? [];
+    final routine = await _getSmartStrongliftsRoutine();
 
     if (routine.isNotEmpty) {
       final List<Exercise> updatedRoutine = [];
@@ -114,18 +113,60 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
         ));
       }
       state = updatedRoutine;
-    } else if (weekday == 1 || weekday == 3 || weekday == 5) {
-      // 5x5 기본 루틴 로직 (필요 시 유지)
-      // 이 부분은 Service로 옮기거나 명확히 관리하는 게 좋음
-      state = []; // 일단 빈 루틴으로 처리하거나 기존 로직 유지
     } else {
       state = [];
     }
     _saveCurrentSession();
   }
 
+  Future<List<Exercise>> _getSmartStrongliftsRoutine() async {
+    // 1. 사용자 설정 주간 루틴이 있는지 먼저 확인
+    final weekday = DateTime.now().weekday;
+    if (_currentWeeklyRoutine.containsKey(weekday) && _currentWeeklyRoutine[weekday]!.isNotEmpty) {
+      return _currentWeeklyRoutine[weekday]!;
+    }
+
+    // 2. 설정이 없다면 Stronglifts A/B 교차 로직 실행
+    // 월(1), 수(3), 금(5)에만 루틴 생성
+    if (weekday != 1 && weekday != 3 && weekday != 5) return [];
+
+    // 마지막으로 수행한 '프레스' 종목을 찾아 A/B 판별
+    // 벤치 프레스(A) vs 오버헤드 프레스(B)
+    final lastBench = await _service.getLatestWeight('플랫 벤치 프레스') ?? await _service.getLatestWeight('벤치 프레스');
+    final lastOhp = await _service.getLatestWeight('오버헤드 프레스 (OHP)') ?? await _service.getLatestWeight('오버헤드 프레스');
+
+    // 기록이 없거나, OHP가 더 최근(또는 동일)이면 Workout A 추천
+    // 실제로는 날짜 비교가 정확하지만, 여기서는 단순 교차를 위해 마지막 기록 유무로 판단하거나 
+    // 기본값 A로 시작
+    bool isWorkoutA = true;
+    if (lastBench != null && lastOhp != null) {
+      // 더 최근에 한 쪽의 반대 루틴 선택 (여기서는 간단히 교차 로직 구현)
+      // 실제 구현 시에는 history 테이블에서 마지막 date를 조회하는 것이 가장 정확함
+      final history = await _service.getAllHistory();
+      if (history.isNotEmpty) {
+        final lastWorkoutName = history.first['name'];
+        if (lastWorkoutName.contains('벤치')) isWorkoutA = false;
+        else if (lastWorkoutName.contains('오버헤드')) isWorkoutA = true;
+      }
+    }
+
+    if (isWorkoutA) {
+      return [
+        Exercise.initial(id: 'a1', name: '백 스쿼트', sets: 5, reps: 5, weight: 60),
+        Exercise.initial(id: 'a2', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 40),
+        Exercise.initial(id: 'a3', name: '펜들레이 로우', sets: 5, reps: 5, weight: 40),
+      ];
+    } else {
+      return [
+        Exercise.initial(id: 'b1', name: '백 스쿼트', sets: 5, reps: 5, weight: 60),
+        Exercise.initial(id: 'b2', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 30),
+        Exercise.initial(id: 'b3', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 80),
+      ];
+    }
+  }
+
   Future<void> saveCurrentWorkoutToHistory() async {
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toString().split(' ')[0]; // YYYY-MM-DD로 통일
     final List<Map<String, dynamic>> historyData = [];
 
     for (var ex in state) {

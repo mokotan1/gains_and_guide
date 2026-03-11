@@ -40,7 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // --- CSV 데이터 생성 로직 ---
   Future<String> _generateWorkoutCsv(List<Exercise> currentExercises) async {
-    String csv = "date,name,weight,sets,reps,rpe_list\n";
+    String csv = "date,name,weight,sets,reps,rpe_list,total_volume,avg_rpe\n";
     final history = await DatabaseHelper.instance.getAllHistory();
 
     Map<String, Map<String, List<Map<String, dynamic>>>> grouped = {};
@@ -57,19 +57,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         double weight = sets.first['weight'];
         int reps = sets.first['reps'];
         String rpes = sets.map((s) => s['rpe'] ?? 8).join('|');
-        csv += "$date,$name,$weight,${sets.length},$reps,$rpes\n";
+        
+        // 지표 계산
+        double volume = sets.fold(0.0, (prev, s) => prev + (s['weight'] * s['reps']));
+        double avgRpe = sets.fold(0.0, (prev, s) => prev + (s['rpe'] ?? 8)) / sets.length;
+        
+        csv += "$date,$name,$weight,${sets.length},$reps,$rpes,${volume.toStringAsFixed(1)},${avgRpe.toStringAsFixed(1)}\n";
       });
     });
 
     String today = DateTime.now().toString().split(' ')[0];
     if (!grouped.containsKey(today)) {
       for (var ex in currentExercises) {
-        String rpes = ex.setRpe.asMap().entries
+        final completedRpes = ex.setRpe.asMap().entries
             .where((entry) => ex.setStatus[entry.key])
             .map((entry) => entry.value ?? 8)
-            .join('|');
-        if (rpes.isNotEmpty) {
-          csv += "$today,${ex.name},${ex.weight},${ex.sets},${ex.reps},$rpes\n";
+            .toList();
+            
+        if (completedRpes.isNotEmpty) {
+          String rpeStr = completedRpes.join('|');
+          double volume = ex.weight * ex.reps * completedRpes.length;
+          double avgRpe = completedRpes.fold(0, (a, b) => a + b) / completedRpes.length;
+          
+          csv += "$today,${ex.name},${ex.weight},${ex.sets},${ex.reps},$rpeStr,${volume.toStringAsFixed(1)},${avgRpe.toStringAsFixed(1)}\n";
         }
       }
     }

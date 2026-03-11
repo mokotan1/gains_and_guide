@@ -122,7 +122,7 @@ class DatabaseHelper {
     await db.insert('progression_history', {
       'name': name,
       'weight': weight,
-      'date': DateTime.now().toIso8601String(),
+      'date': DateTime.now().toString().split(' ')[0], // YYYY-MM-DD 형식으로 통일
     });
   }
 
