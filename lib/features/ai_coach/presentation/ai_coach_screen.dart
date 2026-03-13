@@ -21,30 +21,124 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
     if (_messageController.text.isEmpty) return;
     final userMsg = _messageController.text;
 
-    ref.read(chatProvider.notifier).addMessage({'role': 'user', 'content': userMsg, 'routine': null});
+    ref
+        .read(chatProvider.notifier)
+        .addMessage({'role': 'user', 'content': userMsg, 'routine': null});
     setState(() => _isLoading = true);
     _messageController.clear();
 
-    final historyRepo = ref.read(workoutHistoryRepositoryProvider);
-    final history = await historyRepo.getAllHistory();
-    String contextData = history.isEmpty ? "기록 없음" : history.take(15).map((h) =>
-    "${h['date'].toString().split(' ')[0]} - ${h['name']}: ${h['weight']}kg RPE:${h['rpe']}"
-    ).join('\n');
+    final String contextData = await _buildPersonalizedContext(userMsg);
 
     try {
       final response = await http.post(
         Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'user_id': 'master', 'message': userMsg, 'context': contextData}),
+        body: jsonEncode({
+          'user_id': 'master',
+          'message': userMsg,
+          'context': contextData,
+        }),
       ).timeout(const Duration(seconds: 45));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
-        ref.read(chatProvider.notifier).addMessage({'role': 'assistant', 'content': data['response'], 'routine': data['routine']});
+        ref.read(chatProvider.notifier).addMessage({
+          'role': 'assistant',
+          'content': data['response'],
+          'routine': data['routine'],
+        });
       }
     } catch (e) {
-      ref.read(chatProvider.notifier).addMessage({'role': 'assistant', 'content': '연결 실패. 서버를 확인해 주세요.', 'routine': null});
-    } finally { if (mounted) setState(() => _isLoading = false); }
+      ref.read(chatProvider.notifier).addMessage({
+        'role': 'assistant',
+        'content': '연결 실패. 서버를 확인해 주세요.',
+        'routine': null,
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// AI가 더 개인화된 루틴을 제안할 수 있도록,
+  /// 프로필 + 최근 운동 히스토리 + 현재 루틴 요약을 하나의 컨텍스트 문자열로 구성한다.
+  Future<String> _buildPersonalizedContext(String userMsg) async {
+    final historyRepo = ref.read(workoutHistoryRepositoryProvider);
+    final profileRepo = ref.read(bodyProfileRepositoryProvider);
+    final exercises = ref.read(workoutProvider);
+
+    final history = await historyRepo.getAllHistory();
+    final profile = await profileRepo.getProfile();
+
+    final buffer = StringBuffer();
+
+    buffer.writeln('USER_PROFILE:');
+    if (profile == null) {
+      buffer.writeln('- profile_available: false');
+    } else {
+      buffer.writeln('- profile_available: true');
+      buffer.writeln('- weight_kg: ${profile['weight']}');
+      buffer.writeln('- muscle_mass_kg: ${profile['muscle_mass']}');
+    }
+    buffer.writeln();
+
+    buffer.writeln('CURRENT_GOAL_AND_CONTEXT:');
+    buffer.writeln(
+        '- default_goal: strength_and_hypertrophy (근비대 + 중량 향상)');
+    buffer.writeln('- weekly_target_sessions: 3');
+    buffer.writeln('- user_message: "$userMsg"');
+    buffer.writeln();
+
+    buffer.writeln('RECENT_WORKOUT_HISTORY (최근 최대 20세트):');
+    if (history.isEmpty) {
+      buffer.writeln('- no_history: true');
+    } else {
+      for (final h in history.take(20)) {
+        final date = h['date'].toString().split(' ').first;
+        buffer.writeln(
+            '- $date | ${h['name']} | set ${h['sets']} | ${h['reps']} reps @ ${h['weight']}kg | RPE: ${h['rpe']}');
+      }
+    }
+    buffer.writeln();
+
+    buffer.writeln('PER_EXERCISE_SUMMARY (최근 기록 기준):');
+    if (history.isNotEmpty) {
+      final Map<String, Map<String, dynamic>> summary = {};
+      for (final h in history) {
+        final name = (h['name'] ?? '').toString();
+        if (name.isEmpty) continue;
+        final key = name;
+        summary.putIfAbsent(key, () {
+          return {
+            'last_date': h['date'].toString().split(' ').first,
+            'last_weight': (h['weight'] as num?)?.toDouble() ?? 0.0,
+            'last_rpe': (h['rpe'] as num?)?.toDouble() ?? 0.0,
+            'total_sets': 0,
+          };
+        });
+        summary[key]!['total_sets'] =
+            (summary[key]!['total_sets'] as int) + 1;
+      }
+
+      summary.forEach((name, s) {
+        buffer.writeln(
+            '- $name | last_date: ${s['last_date']} | last_weight_kg: ${s['last_weight']} | last_rpe: ${s['last_rpe']} | total_sets: ${s['total_sets']}');
+      });
+    } else {
+      buffer.writeln('- no_exercise_summary: true');
+    }
+    buffer.writeln();
+
+    buffer.writeln('TODAY_PLAN (현재 앱에 세팅된 루틴):');
+    if (exercises.isEmpty) {
+      buffer.writeln('- no_plan: true');
+    } else {
+      for (final ex in exercises) {
+        buffer.writeln(
+            '- ${ex.name} | sets: ${ex.sets} | reps: ${ex.reps} | weight_kg: ${ex.weight} | is_cardio: ${ex.isCardio} | is_bodyweight: ${ex.isBodyweight}');
+      }
+    }
+
+    return buffer.toString();
   }
 
   Future<void> _applyRoutine(Map<String, dynamic> routine) async {
