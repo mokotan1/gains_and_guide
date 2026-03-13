@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: gains-and-guide-ai
+    env: docker
+    dockerFilePath: backend_ai/Dockerfile
+    dockerContext: backend_ai
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
