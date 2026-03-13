@@ -1,19 +1,17 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_background/flutter_background.dart';
-import 'package:gains_and_guide/features/home/presentation/home_screen.dart';
-import 'package:gains_and_guide/features/routine/presentation/program_selection_screen.dart';
+import 'package:gains_and_guide/core/bootstrap/database_bootstrap.dart';
+import 'package:gains_and_guide/core/database/database_helper.dart';
 import 'package:gains_and_guide/features/ai_coach/presentation/ai_coach_screen.dart';
 import 'package:gains_and_guide/features/home/presentation/body_profile_screen.dart';
-import 'package:gains_and_guide/core/database/database_helper.dart';
+import 'package:gains_and_guide/features/home/presentation/home_screen.dart';
+import 'package:gains_and_guide/features/routine/presentation/program_selection_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // DB 초기화 및 시딩
-  await _initializeDatabase();
+  await DatabaseBootstrap.run(DatabaseHelper.instance);
 
   // 💡 [핵심 수정] Default -> normal 로 변경하면 에러가 사라집니다.
   final androidConfig = FlutterBackgroundAndroidConfig(
@@ -27,43 +25,6 @@ void main() async {
   await FlutterBackground.enableBackgroundExecution();
 
   runApp(const ProviderScope(child: MyApp()));
-}
-
-Future<void> _initializeDatabase() async {
-  final dbHelper = DatabaseHelper.instance;
-  
-  // 테이블이 비어있는지 확인
-  if (await dbHelper.isExerciseCatalogEmpty()) {
-    try {
-      // JSON 파일 읽기
-      final String response = await rootBundle.loadString('assets/data/exercises.json');
-      final data = await json.decode(response);
-      final List<dynamic> exercisesJson = data['exercises'];
-
-      // DB에 넣을 형식으로 변환
-      final List<Map<String, dynamic>> exercisesToSeed = exercisesJson.map((e) {
-        return {
-          'name': e['name'],
-          'category': e['category'],
-          'equipment': (e['equipment'] is List) 
-              ? (e['equipment'] as List).join(', ') 
-              : e['equipment'].toString(),
-          'primary_muscles': (e['primary_muscles'] is List)
-              ? (e['primary_muscles'] as List).join(', ')
-              : e['primary_muscles'].toString(),
-          'instructions': (e['instructions'] is List)
-              ? (e['instructions'] as List).join('\n') // 설명은 줄바꿈이 나을 수 있음
-              : e['instructions'].toString(),
-        };
-      }).toList();
-
-      // 시딩 실행
-      await dbHelper.seedExerciseCatalog(exercisesToSeed);
-      debugPrint('운동 카탈로그 시딩 완료: ${exercisesToSeed.length}개 운동');
-    } catch (e) {
-      debugPrint('운동 카탈로그 시딩 실패: $e');
-    }
-  }
 }
 
 class MyApp extends StatelessWidget {

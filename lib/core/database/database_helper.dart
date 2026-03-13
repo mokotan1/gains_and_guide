@@ -105,6 +105,12 @@ class DatabaseHelper {
     return count == 0;
   }
 
+  /// 전체 운동 카탈로그 조회 (부위별 선택용)
+  Future<List<Map<String, dynamic>>> getExerciseCatalogAll() async {
+    final db = await instance.database;
+    return db.query('exercise_catalog');
+  }
+
   // 운동 카탈로그 검색
   Future<List<ExerciseCatalog>> searchCatalogExercises(String keyword) async {
     final db = await instance.database;

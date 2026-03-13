@@ -1,11 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../../../core/workout_provider.dart';
 import '../../../core/chat_provider.dart';
+import '../../../core/providers/repository_providers.dart';
+import '../../../core/workout_provider.dart';
 import '../../routine/domain/exercise.dart';
-import '../../../core/database/database_helper.dart';
 
 class AICoachScreen extends ConsumerStatefulWidget {
   const AICoachScreen({super.key});
@@ -25,7 +25,8 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
     setState(() => _isLoading = true);
     _messageController.clear();
 
-    final history = await DatabaseHelper.instance.getAllHistory();
+    final historyRepo = ref.read(workoutHistoryRepositoryProvider);
+    final history = await historyRepo.getAllHistory();
     String contextData = history.isEmpty ? "기록 없음" : history.take(15).map((h) =>
     "${h['date'].toString().split(' ')[0]} - ${h['name']}: ${h['weight']}kg RPE:${h['rpe']}"
     ).join('\n');
@@ -54,8 +55,8 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
       final entry = list[i];
       final String name = entry['name'];
       
-      // DB에서 카탈로그 정보 검색
-      final results = await DatabaseHelper.instance.searchCatalogExercises(name);
+      final catalogRepo = ref.read(exerciseCatalogRepositoryProvider);
+      final results = await catalogRepo.search(name);
       
       if (results.isNotEmpty) {
         // 정확히 일치하는 이름을 찾거나, 첫 번째 결과 사용

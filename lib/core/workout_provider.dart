@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/routine/domain/exercise.dart';
 import '../features/routine/application/workout_service.dart';
-import 'database/database_helper.dart'; // DB 기록 조회를 위해 추가
+import 'constants/workout_constants.dart';
 
 class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   final WorkoutService _service;
@@ -57,8 +57,9 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   }
 
   void replaceRecommendedExercises(List<Exercise> newExercises) {
-    final coreNames = ['백 스쿼트', '플랫 벤치 프레스', '펜들레이 로우', '오버헤드 프레스 (OHP)', '컨벤셔널 데드리프트', '스쿼트', '벤치 프레스'];
-    final coreState = state.where((ex) => coreNames.contains(ex.name)).toList();
+    final coreState = state
+        .where((ex) => WorkoutConstants.coreExerciseNamesToKeep.contains(ex.name))
+        .toList();
     state = [...coreState, ...newExercises];
     _saveCurrentSession();
   }
@@ -126,46 +127,63 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     _saveCurrentSession();
   }
 
-  // [기록 기반 A/B 코스 교차 로직 함수]
+  /// 기록 기반 Stronglifts 5x5 A/B 코스 교차 로직
+  /// - workout_history는 date DESC로 조회되므로 첫 행이 가장 최근 날짜
+  /// - 날짜는 항상 YYYY-MM-DD로 정규화해 비교 (DB/시간대 차이 대비)
   Future<List<Exercise>> _getSmartStrongliftsRoutine(List<Exercise> defaultRoutine) async {
-    final history = await DatabaseHelper.instance.getAllHistory();
+    final history = await _service.getAllHistory();
+    if (history.isEmpty) return defaultRoutine;
 
-    if (history.isEmpty) return defaultRoutine; // 기록 없으면 기본값
+    final lastDate = _normalizeDateString(history.first['date']);
+    if (lastDate.isEmpty) return defaultRoutine;
 
-    // 가장 최근 운동 날짜 찾기
-    final lastDate = history.first['date'].toString().split(' ')[0];
-
-    // 가장 최근 운동 날짜에 수행한 운동 이름들 수집
     final lastExercises = history
-        .where((h) => h['date'].toString().startsWith(lastDate))
-        .map((h) => h['name'].toString())
+        .where((h) => _normalizeDateString(h['date']) == lastDate)
+        .map((h) => (h['name']?.toString() ?? '').trim())
+        .where((s) => s.isNotEmpty)
         .toSet();
 
-    // A코스 정의 (스쿼트, 벤치, 로우)
     final routineA = [
       Exercise.initial(id: 's1_a', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
       Exercise.initial(id: 's2_a', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 80),
       Exercise.initial(id: 's3_a', name: '펜들레이 로우', sets: 5, reps: 5, weight: 80),
     ];
-
-    // B코스 정의 (스쿼트, OHP, 데드리프트)
     final routineB = [
       Exercise.initial(id: 's1_b', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
       Exercise.initial(id: 's4_b', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 55),
       Exercise.initial(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 145),
     ];
 
-    // 마지막으로 '플랫 벤치 프레스'를 했다면 (A코스를 했음) -> 오늘은 B코스
-    if (lastExercises.contains('플랫 벤치 프레스')) {
-      return routineB;
+    if (lastExercises.any((e) => WorkoutConstants.strongliftsRoutineAKeys.contains(e))) {
+      return _mergeWithAccessories(routineB, defaultRoutine, WorkoutConstants.strongliftsMainB);
     }
-    // 마지막으로 '오버헤드 프레스 (OHP)'를 했다면 (B코스를 했음) -> 오늘은 A코스
-    else if (lastExercises.contains('오버헤드 프레스 (OHP)')) {
-      return routineA;
+    if (lastExercises.any((e) => WorkoutConstants.strongliftsRoutineBKeys.contains(e))) {
+      return _mergeWithAccessories(routineA, defaultRoutine, WorkoutConstants.strongliftsMainA);
     }
 
-    // 판단 불가 시 지정된 기본 루틴 반환
     return defaultRoutine;
+  }
+
+  /// 메인 루틴(A 또는 B) 뒤에, 그날 루틴에 있던 보조 운동을 그대로 붙임
+  static List<Exercise> _mergeWithAccessories(
+    List<Exercise> mainRoutine,
+    List<Exercise> dayRoutine,
+    List<String> mainNames,
+  ) {
+    final accessories = dayRoutine
+        .where((e) => !mainNames.contains(e.name))
+        .toList();
+    if (accessories.isEmpty) return mainRoutine;
+    return [...mainRoutine, ...accessories];
+  }
+
+  /// DB/SharedPreferences 등에서 오는 날짜 값을 YYYY-MM-DD로 통일
+  static String _normalizeDateString(dynamic value) {
+    if (value == null) return '';
+    final s = value.toString().trim();
+    if (s.isEmpty) return '';
+    final part = s.split(' ').first;
+    return part.length >= 10 ? part.substring(0, 10) : part;
   }
 
   Future<void> saveCurrentWorkoutToHistory() async {
@@ -180,9 +198,9 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
       for (int i = 0; i < ex.sets; i++) {
         if (ex.setStatus[i]) {
           completedSets++;
-          int rpe = ex.setRpe[i] ?? 8;
-          if (rpe < 3) countBelow3++;
-          if (rpe < 8) countBelow8++;
+          int rpe = ex.setRpe[i] ?? WorkoutConstants.defaultRpe;
+          if (rpe < WorkoutConstants.rpeThresholdForFullIncrement) countBelow3++;
+          if (rpe < WorkoutConstants.rpeThresholdForHalfIncrement) countBelow8++;
 
           historyData.add({
             'name': ex.name,
@@ -197,13 +215,11 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
       if (completedSets > 0 && !ex.isCardio) {
         double newWeight = ex.weight;
-        // [수정 2] 증량 조건을 5고정에서, 운동의 목표 세트 수(ex.sets)로 변경
-        // 이렇게 하면 1세트인 데드리프트나 3세트인 보조 운동도 기록이 정상 저장됩니다.
         if (countBelow3 >= ex.sets) {
-          newWeight += 5.0;
+          newWeight += WorkoutConstants.weightIncrementFull;
           await _service.saveProgression(ex.name, newWeight);
         } else if (countBelow8 >= ex.sets) {
-          newWeight += 2.5;
+          newWeight += WorkoutConstants.weightIncrementHalf;
           await _service.saveProgression(ex.name, newWeight);
         }
       }

@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_vibrate/flutter_vibrate.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../../core/workout_provider.dart';
-import '../../../core/database/database_helper.dart';
+import '../../../core/providers/repository_providers.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/workout_provider.dart';
 import '../../routine/domain/exercise.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -41,7 +41,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // --- CSV 데이터 생성 로직 ---
   Future<String> _generateWorkoutCsv(List<Exercise> currentExercises) async {
     String csv = "date,name,weight,sets,reps,rpe_list,total_volume,avg_rpe\n";
-    final history = await DatabaseHelper.instance.getAllHistory();
+    final historyRepo = ref.read(workoutHistoryRepositoryProvider);
+    final history = await historyRepo.getAllHistory();
 
     Map<String, Map<String, List<Map<String, dynamic>>>> grouped = {};
     for (var row in history) {
@@ -136,7 +137,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       await _exportHistoryToCsv();
 
       // 2. 프로필 및 데이터 준비
-      final profile = await DatabaseHelper.instance.getProfile();
+      final profileRepo = ref.read(bodyProfileRepositoryProvider);
+      final profile = await profileRepo.getProfile();
       String pInfo = profile != null ? "사용자 체중: ${profile['weight']}kg. " : "";
       String fullCsv = await _generateWorkoutCsv(currentExercises);
 
@@ -203,9 +205,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _showAddExerciseDialog() async {
-    // 1. DB에서 운동 카탈로그 데이터 비동기 조회
-    final db = await DatabaseHelper.instance.database;
-    final List<Map<String, dynamic>> catalog = await db.query('exercise_catalog');
+    final catalogRepo = ref.read(exerciseCatalogRepositoryProvider);
+    final List<Map<String, dynamic>> catalog = await catalogRepo.getAll();
 
     // 2. 부위별 데이터 파싱 및 분류 (기본 운동 포함하여 누락 방지)
     final Map<String, Set<String>> rawExerciseData = {
@@ -352,7 +353,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       selectedExercise = newValue;
                       // 맨몸 운동일 경우 사용자의 몸무게를 자동으로 가져옴
                       if (newValue != null && _checkIsBodyweight(newValue)) {
-                        final profile = await DatabaseHelper.instance.getProfile();
+                        final profileRepo = ref.read(bodyProfileRepositoryProvider);
+                        final profile = await profileRepo.getProfile();
                         if (profile != null) {
                           weight = (profile['weight'] as num).toDouble();
                         }
@@ -627,7 +629,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _exportHistoryToCsv() async {
     try {
-      final history = await DatabaseHelper.instance.getAllHistory();
+      final historyRepo = ref.read(workoutHistoryRepositoryProvider);
+      final history = await historyRepo.getAllHistory();
       if (history.isEmpty) return;
       String csvData = 'Date,Exercise,Set,Reps,Weight,RPE\n';
       for (var row in history) {
@@ -753,17 +756,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildFinishButton(List<Exercise> exercises) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: () => _processAiRecommendation(exercises),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.successGreen,
-          padding: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () => _processAiRecommendation(exercises),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.successGreen,
+              padding: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('오늘의 훈련 종료 및 정산', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
         ),
-        child: const Text('오늘의 훈련 종료 및 정산', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-      ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () async {
+              await ref.read(workoutProvider.notifier).saveCurrentWorkoutToHistory();
+              ref.read(workoutProvider.notifier).finishWorkout();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('오늘 운동 기록이 저장되었습니다. 내일 루틴이 A/B에 맞춰 바뀝니다.')),
+                );
+              }
+            },
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.all(14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('기록만 저장하고 종료 (AI 없이)', style: TextStyle(fontSize: 14)),
+          ),
+        ),
+      ],
     );
   }
 

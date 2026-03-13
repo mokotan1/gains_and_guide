@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/database/database_helper.dart';
+import '../../../core/providers/repository_providers.dart';
 import '../../../core/workout_provider.dart';
-import '../../../core/database/database_helper.dart';
 import '../domain/exercise.dart';
 
 class WeeklyProgram {
@@ -146,7 +145,8 @@ class ProgramSelectionScreen extends ConsumerWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () async {
-                      final history = await DatabaseHelper.instance.getAllHistory();
+                      final historyRepo = ref.read(workoutHistoryRepositoryProvider);
+                      final history = await historyRepo.getAllHistory();
                       final today = DateTime.now().toString().split(' ')[0];
                       final didWorkoutToday = history.any((h) => h['date'].toString().startsWith(today));
 

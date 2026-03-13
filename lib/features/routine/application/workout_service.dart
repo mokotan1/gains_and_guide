@@ -1,16 +1,18 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../domain/exercise.dart';
-import '../domain/routine.dart';
 import '../data/routine_repository.dart';
-import '../../../core/database/database_helper.dart';
+import '../domain/exercise.dart';
+import '../../../core/domain/repositories/progression_repository.dart';
+import '../../../core/domain/repositories/workout_history_repository.dart';
+import '../../../core/providers/repository_providers.dart';
 
 class WorkoutService {
   final RoutineRepository _repository;
-  final DatabaseHelper _dbHelper;
+  final WorkoutHistoryRepository _historyRepo;
+  final ProgressionRepository _progressionRepo;
 
-  WorkoutService(this._repository, this._dbHelper);
+  WorkoutService(this._repository, this._historyRepo, this._progressionRepo);
 
   static const String _programKey = 'saved_weekly_program';
   static const String _sessionKey = 'current_workout_session';
@@ -79,22 +81,23 @@ class WorkoutService {
     return prefs.getBool('is_workout_finished') ?? false;
   }
 
-  Future<double?> getLatestWeight(String name) {
-    return _dbHelper.getLatestWeight(name);
-  }
+  Future<double?> getLatestWeight(String name) =>
+      _progressionRepo.getLatestWeight(name);
 
-  Future<void> saveWorkoutHistory(List<Map<String, dynamic>> historyData) {
-    return _dbHelper.saveWorkoutHistory(historyData);
-  }
+  Future<void> saveWorkoutHistory(List<Map<String, dynamic>> historyData) =>
+      _historyRepo.saveWorkoutHistory(historyData);
 
-  Future<void> saveProgression(String name, double weight) {
-    return _dbHelper.saveProgression(name, weight);
-  }
+  Future<void> saveProgression(String name, double weight) =>
+      _progressionRepo.saveProgression(name, weight);
+
+  Future<List<Map<String, dynamic>>> getAllHistory() =>
+      _historyRepo.getAllHistory();
 }
 
 final workoutServiceProvider = Provider<WorkoutService>((ref) {
   return WorkoutService(
     ref.watch(routineRepositoryProvider),
-    DatabaseHelper.instance,
+    ref.watch(workoutHistoryRepositoryProvider),
+    ref.watch(progressionRepositoryProvider),
   );
 });

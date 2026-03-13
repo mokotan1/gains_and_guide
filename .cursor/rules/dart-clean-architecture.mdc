@@ -1,0 +1,21 @@
+---
+description: Dart/Flutter 클린 아키텍처 및 의존성 규칙
+globs: "**/*.dart"
+alwaysApply: false
+---
+
+# Dart/Flutter Clean Architecture
+
+## 의존성 역전 (DIP)
+- **UI·Notifier**: `DatabaseHelper` 등 구체 클래스에 직접 의존하지 말 것. Repository **인터페이스**(abstract class) 또는 Provider를 통해 데이터 접근.
+- Repository 구현체는 `core/data/` 또는 feature의 `data/`에 두고, 도메인 인터페이스는 `core/domain/repositories/` 등에 정의.
+
+## 매직 넘버/문자열
+- 증량 단위, RPE 기준값, 코어 운동 이름 등은 `WorkoutConstants` 또는 feature별 상수 파일로 추출.
+
+## 방어적 코딩
+- `fromJson`/`fromMap`: 필수 필드·타입 검증 후 파싱. 실패 시 `ExerciseParseException` 등 커스텀 예외로 래핑해 스택/내부 정보 노출 최소화.
+- 외부 API/SharedPreferences 응답은 null·타입 검사 후 사용.
+
+## 테스트
+- Repository·Service 단위 테스트 시 `DatabaseHelper`/네트워크는 Mock·Fake로 대체.

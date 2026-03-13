@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import '../../../core/database/database_helper.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/repository_providers.dart';
 
-class BodyProfileScreen extends StatefulWidget {
+class BodyProfileScreen extends ConsumerStatefulWidget {
   const BodyProfileScreen({super.key});
 
   @override
-  State<BodyProfileScreen> createState() => _BodyProfileScreenState();
+  ConsumerState<BodyProfileScreen> createState() => _BodyProfileScreenState();
 }
 
-class _BodyProfileScreenState extends State<BodyProfileScreen> {
+class _BodyProfileScreenState extends ConsumerState<BodyProfileScreen> {
   final _wController = TextEditingController();
   final _mController = TextEditingController();
 
@@ -19,7 +20,8 @@ class _BodyProfileScreenState extends State<BodyProfileScreen> {
   }
 
   void _load() async {
-    final p = await DatabaseHelper.instance.getProfile();
+    final repo = ref.read(bodyProfileRepositoryProvider);
+    final p = await repo.getProfile();
     if (p != null) {
       setState(() {
         _wController.text = p['weight'].toString();
@@ -51,7 +53,8 @@ class _BodyProfileScreenState extends State<BodyProfileScreen> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () async {
-                await DatabaseHelper.instance.saveProfile({
+                final repo = ref.read(bodyProfileRepositoryProvider);
+                await repo.saveProfile({
                   'id': 1,
                   'weight': double.tryParse(_wController.text) ?? 0,
                   'muscle_mass': double.tryParse(_mController.text) ?? 0

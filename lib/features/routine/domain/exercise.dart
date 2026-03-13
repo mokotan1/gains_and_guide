@@ -1,4 +1,10 @@
-import 'package:flutter/material.dart';
+/// JSON 역직렬화 실패 시 사용 (스택/내부 정보 노출 방지)
+class ExerciseParseException implements Exception {
+  final String message;
+  ExerciseParseException(this.message);
+  @override
+  String toString() => 'ExerciseParseException: $message';
+}
 
 class Exercise {
   final String id;
@@ -81,15 +87,67 @@ class Exercise {
     'isCardio': isCardio,
   };
 
-  factory Exercise.fromJson(Map<String, dynamic> json) => Exercise(
-    id: json['id'],
-    name: json['name'],
-    sets: json['sets'],
-    reps: json['reps'],
-    weight: json['weight'].toDouble(),
-    setStatus: List<bool>.from(json['setStatus'] ?? []),
-    setRpe: List<int?>.from(json['setRpe'] ?? []),
-    isBodyweight: json['isBodyweight'] ?? false,
-    isCardio: json['isCardio'] ?? false,
-  );
+  factory Exercise.fromJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString();
+    final name = json['name']?.toString();
+    if (id == null || id.isEmpty) throw ExerciseParseException('id is required');
+    if (name == null || name.isEmpty) throw ExerciseParseException('name is required');
+
+    final sets = _parseInt(json['sets'], 'sets', min: 1);
+    final reps = _parseInt(json['reps'], 'reps', min: 1);
+    final weight = _parseDouble(json['weight'], 'weight', min: 0);
+
+    final setStatus = _parseBoolList(json['setStatus'], sets);
+    final setRpe = _parseNullableIntList(json['setRpe'], sets);
+
+    return Exercise(
+      id: id,
+      name: name,
+      sets: sets,
+      reps: reps,
+      weight: weight,
+      setStatus: setStatus,
+      setRpe: setRpe,
+      isBodyweight: json['isBodyweight'] == true,
+      isCardio: json['isCardio'] == true,
+    );
+  }
+
+  static int _parseInt(dynamic v, String field, {int min = 0}) {
+    if (v == null) return min;
+    if (v is int) return v >= min ? v : min;
+    if (v is num) return v.toInt().clamp(min, 999);
+    final n = int.tryParse(v.toString());
+    if (n == null) throw ExerciseParseException('$field must be a number');
+    return n.clamp(min, 999);
+  }
+
+  static double _parseDouble(dynamic v, String field, {double min = 0}) {
+    if (v == null) return min;
+    if (v is num) return v.toDouble().clamp(min, double.infinity);
+    final n = double.tryParse(v.toString());
+    if (n == null) throw ExerciseParseException('$field must be a number');
+    return n.clamp(min, double.infinity);
+  }
+
+  static List<bool> _parseBoolList(dynamic v, int length) {
+    final result = List.filled(length, false);
+    if (v is! List || length <= 0) return result;
+    for (int i = 0; i < length && i < v.length; i++) {
+      result[i] = v[i] == true;
+    }
+    return result;
+  }
+
+  static List<int?> _parseNullableIntList(dynamic v, int length) {
+    final result = List<int?>.filled(length, null);
+    if (v is! List || length <= 0) return result;
+    for (int i = 0; i < length && i < v.length; i++) {
+      final e = v[i];
+      if (e == null) continue;
+      if (e is int) result[i] = e;
+      else result[i] = int.tryParse(e.toString());
+    }
+    return result;
+  }
 }
