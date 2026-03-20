@@ -20,15 +20,20 @@ class DeloadRepositoryImpl implements DeloadRepository {
     required DateTime endDate,
     required String reason,
     required double fatigueScore,
+    required int cycleSessions,
   }) async {
     await _db.saveDeloadRecord(
       startDate: startDate.toString().split(' ')[0],
       endDate: endDate.toString().split(' ')[0],
       reason: reason,
       fatigueScore: fatigueScore,
+      remainingSessions: cycleSessions,
     );
   }
 
   @override
   Future<bool> isCurrentlyInDeload() => _db.isCurrentlyInDeload();
+
+  @override
+  Future<void> decrementDeloadSession() => _db.decrementDeloadSession();
 }

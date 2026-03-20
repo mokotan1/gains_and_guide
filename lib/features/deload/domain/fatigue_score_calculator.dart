@@ -180,7 +180,7 @@ class FatigueScoreCalculator {
       reductionRatio: shouldDeload
           ? DeloadConstants.deloadWeightReductionRatio
           : 1.0,
-      durationDays: shouldDeload ? DeloadConstants.deloadDurationDays : 0,
+      cycleSessions: shouldDeload ? DeloadConstants.defaultDeloadCycleSessions : 0,
       summary: summary,
     );
   }

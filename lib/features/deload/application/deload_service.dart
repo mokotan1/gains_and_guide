@@ -59,10 +59,16 @@ class DeloadService {
     final now = DateTime.now();
     await _deloadRepo.saveDeloadRecord(
       startDate: now,
-      endDate: now.add(Duration(days: rec.durationDays)),
+      endDate: now,
       reason: rec.summary,
       fatigueScore: rec.totalScore,
+      cycleSessions: rec.cycleSessions,
     );
+  }
+
+  /// 디로드 중 운동 1세션 완료 시 호출하여 남은 세션 차감
+  Future<void> completeDeloadSession() async {
+    await _deloadRepo.decrementDeloadSession();
   }
 
   // ---------------------------------------------------------------------------
@@ -124,6 +130,8 @@ class DeloadService {
     );
   }
 
+  /// RPE 10 세트를 "실패"로 간주하여 실패율 산출
+  /// 실패 = RPE 10 (세트 실패 시 RPE 10으로 자동 기록됨)
   Future<FatigueSignal> _collectFailureSignal() async {
     final rows = await _historyRepo.getRecentSessions(
       DeloadConstants.failureLookbackSessions,
@@ -135,34 +143,13 @@ class DeloadService {
       );
     }
 
-    final sessionDates = rows
-        .map((r) => (r['date'] as String).substring(0, 10))
-        .toSet();
-
-    int totalExpected = 0;
-    int totalCompleted = rows.length;
-
-    for (final date in sessionDates) {
-      final dayRows = rows.where(
-        (r) => (r['date'] as String).substring(0, 10) == date,
-      );
-      final exerciseNames = dayRows.map((r) => r['name'] as String).toSet();
-      for (final name in exerciseNames) {
-        final exRows =
-            dayRows.where((r) => r['name'] == name).toList();
-        final maxSet = exRows.fold<int>(
-          0,
-          (prev, r) => (r['sets'] as int) > prev ? (r['sets'] as int) : prev,
-        );
-        totalExpected += maxSet;
-      }
-    }
-
-    if (totalExpected == 0) totalExpected = totalCompleted;
+    int totalSets = rows.length;
+    int failedSets = rows.where((r) => (r['rpe'] as int?) == 10).length;
+    int successSets = totalSets - failedSets;
 
     return FatigueScoreCalculator.calculateFailureRate(
-      completedSets: totalCompleted,
-      totalSets: totalExpected,
+      completedSets: successSets,
+      totalSets: totalSets,
     );
   }
 }

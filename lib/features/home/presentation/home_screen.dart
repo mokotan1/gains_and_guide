@@ -461,9 +461,105 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (ex.isCardio) {
         _showCardioTimerPopup(exIdx, sIdx, ex);
       } else {
-        _showRpeAndTimerSequence(exIdx, sIdx, exercises);
+        _showSetResultChoice(exIdx, sIdx, exercises);
       }
     }
+  }
+
+  void _showSetResultChoice(int exIdx, int sIdx, List<Exercise> exercises) {
+    final ex = exercises[exIdx];
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text('세트 ${sIdx + 1} 결과'),
+        content: Text('${ex.setWeights[sIdx].toStringAsFixed(1)}kg × ${ex.setReps[sIdx]}회를 수행했나요?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showFailedRepsDialog(exIdx, sIdx, exercises);
+            },
+            child: const Text('실패', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showRpeAndTimerSequence(exIdx, sIdx, exercises);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.successGreen,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('성공', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFailedRepsDialog(int exIdx, int sIdx, List<Exercise> exercises) {
+    final ex = exercises[exIdx];
+    int actualReps = (ex.setReps[sIdx] - 1).clamp(0, ex.setReps[sIdx]);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red.shade400),
+              const SizedBox(width: 8),
+              const Text('실패 기록'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '목표: ${ex.setReps[sIdx]}회',
+                style: const TextStyle(color: Colors.black54),
+              ),
+              const SizedBox(height: 16),
+              const Text('실제 완료 횟수', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: () => setDialogState(() => actualReps = (actualReps - 1).clamp(0, 100)),
+                    icon: const Icon(Icons.remove_circle_outline, color: AppTheme.primaryBlue),
+                  ),
+                  const SizedBox(width: 16),
+                  Text('$actualReps', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 16),
+                  IconButton(
+                    onPressed: () => setDialogState(() => actualReps = (actualReps + 1).clamp(0, 100)),
+                    icon: const Icon(Icons.add_circle_outline, color: AppTheme.primaryBlue),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+            ElevatedButton(
+              onPressed: () {
+                ref.read(workoutProvider.notifier).failSet(exIdx, sIdx, actualReps);
+                Navigator.pop(context);
+                if (sIdx < ex.sets - 1) _showRestTimerPopup();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade400,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('실패 기록'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showCardioTimerPopup(int exIdx, int sIdx, Exercise ex) {
@@ -817,6 +913,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final setWeight = ex.setWeights[sIdx];
     final setRep = ex.setReps[sIdx];
     final isDone = ex.setStatus[sIdx];
+    final isFailed = ex.setFailed[sIdx];
+
+    final Color badgeColor;
+    if (isFailed) {
+      badgeColor = Colors.red.shade400;
+    } else if (isDone) {
+      badgeColor = AppTheme.successGreen;
+    } else {
+      badgeColor = Colors.grey[300]!;
+    }
 
     final String label = ex.isCardio
         ? '목표 시간: ${setRep}분'
@@ -826,18 +932,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       dense: true,
       leading: CircleAvatar(
         radius: 14,
-        backgroundColor: isDone ? AppTheme.successGreen : Colors.grey[300],
-        child: Text(
-          '${sIdx + 1}',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDone ? Colors.white : Colors.black54),
-        ),
+        backgroundColor: badgeColor,
+        child: isFailed
+            ? const Icon(Icons.close, size: 14, color: Colors.white)
+            : Text(
+                '${sIdx + 1}',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDone ? Colors.white : Colors.black54),
+              ),
       ),
       title: GestureDetector(
         onTap: isFinished ? null : () => _showSetEditDialog(exIdx, sIdx, ex),
         child: Row(
           children: [
-            Text(label, style: TextStyle(color: isDone ? Colors.black38 : Colors.black87, decoration: isDone ? TextDecoration.lineThrough : null)),
-            if (!isFinished && !isDone) ...[
+            Text(
+              label,
+              style: TextStyle(
+                color: isFailed ? Colors.red.shade400 : (isDone ? Colors.black38 : Colors.black87),
+                decoration: isDone && !isFailed ? TextDecoration.lineThrough : null,
+              ),
+            ),
+            if (isFailed) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('실패', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade400)),
+              ),
+            ] else if (!isFinished && !isDone) ...[
               const SizedBox(width: 4),
               Icon(Icons.edit, size: 14, color: Colors.grey[400]),
             ],
@@ -876,8 +1000,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               ),
               subtitle: Text(
-                ex.isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | 기본 ${ex.reps}회 | ${ex.weight.toStringAsFixed(1)}kg',
-                style: const TextStyle(color: Colors.black54),
+                ex.isCardio
+                    ? '${ex.reps}분 수행'
+                    : '${ex.sets}세트 | 기본 ${ex.reps}회 | ${ex.weight.toStringAsFixed(1)}kg'
+                      '${ex.failedSetCount > 0 ? ' | ${ex.failedSetCount}세트 실패' : ''}',
+                style: TextStyle(
+                  color: ex.failedSetCount > 0 ? Colors.red.shade400 : Colors.black54,
+                ),
               ),
               children: List.generate(ex.sets, (sIdx) => _buildSetRow(ex, idx, sIdx, isFinished)),
             ),

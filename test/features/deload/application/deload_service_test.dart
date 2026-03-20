@@ -69,17 +69,22 @@ class FakeDeloadRepository implements DeloadRepository {
     required DateTime endDate,
     required String reason,
     required double fatigueScore,
+    required int cycleSessions,
   }) async {
     records.add({
       'startDate': startDate,
       'endDate': endDate,
       'reason': reason,
       'fatigueScore': fatigueScore,
+      'cycleSessions': cycleSessions,
     });
   }
 
   @override
   Future<bool> isCurrentlyInDeload() async => inDeload;
+
+  @override
+  Future<void> decrementDeloadSession() async {}
 }
 
 // =============================================================================
@@ -184,7 +189,7 @@ void main() {
           totalScore: 30,
           signals: [],
           reductionRatio: 1.0,
-          durationDays: 0,
+          cycleSessions: 0,
           summary: '',
         ),
       );
@@ -201,7 +206,7 @@ void main() {
           totalScore: 80,
           signals: [],
           reductionRatio: 0.6,
-          durationDays: 7,
+          cycleSessions: 3,
           summary: 'test',
         ),
       );
@@ -226,7 +231,7 @@ void main() {
           totalScore: 80,
           signals: [],
           reductionRatio: 0.6,
-          durationDays: 7,
+          cycleSessions: 3,
           summary: 'test',
         ),
       );
@@ -244,7 +249,7 @@ void main() {
           totalScore: 75,
           signals: [],
           reductionRatio: 0.6,
-          durationDays: 7,
+          cycleSessions: 3,
           summary: 'test',
         ),
       );

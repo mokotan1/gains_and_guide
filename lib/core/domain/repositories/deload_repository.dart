@@ -6,6 +6,8 @@ abstract class DeloadRepository {
     required DateTime endDate,
     required String reason,
     required double fatigueScore,
+    required int cycleSessions,
   });
   Future<bool> isCurrentlyInDeload();
+  Future<void> decrementDeloadSession();
 }

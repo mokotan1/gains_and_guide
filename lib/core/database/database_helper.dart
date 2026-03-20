@@ -17,7 +17,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 6,
+      version: 7,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -63,7 +63,8 @@ class DatabaseHelper {
         start_date TEXT NOT NULL,
         end_date TEXT NOT NULL,
         reason TEXT,
-        fatigue_score REAL NOT NULL
+        fatigue_score REAL NOT NULL,
+        remaining_sessions INTEGER NOT NULL DEFAULT 0
       )
     ''');
   }
@@ -141,6 +142,12 @@ class DatabaseHelper {
     }
     if (oldVersion < 6) {
       await _createDeloadHistoryTable(db);
+    }
+    if (oldVersion < 7) {
+      await db.execute('''
+        ALTER TABLE deload_history
+        ADD COLUMN remaining_sessions INTEGER NOT NULL DEFAULT 0
+      ''');
     }
   }
 
@@ -306,6 +313,7 @@ class DatabaseHelper {
     required String endDate,
     required String reason,
     required double fatigueScore,
+    required int remainingSessions,
   }) async {
     final db = await instance.database;
     await db.insert('deload_history', {
@@ -313,6 +321,7 @@ class DatabaseHelper {
       'end_date': endDate,
       'reason': reason,
       'fatigue_score': fatigueScore,
+      'remaining_sessions': remainingSessions,
     });
   }
 
@@ -328,12 +337,21 @@ class DatabaseHelper {
 
   Future<bool> isCurrentlyInDeload() async {
     final db = await instance.database;
-    final today = DateTime.now().toString().split(' ')[0];
     final res = await db.rawQuery('''
       SELECT COUNT(*) AS cnt FROM deload_history
-      WHERE start_date <= ? AND end_date >= ?
-    ''', [today, today]);
+      WHERE remaining_sessions > 0
+    ''');
     final count = Sqflite.firstIntValue(res) ?? 0;
     return count > 0;
+  }
+
+  /// 디로드 세션 1회 차감. 0이 되면 디로드 종료.
+  Future<void> decrementDeloadSession() async {
+    final db = await instance.database;
+    await db.rawUpdate('''
+      UPDATE deload_history
+      SET remaining_sessions = remaining_sessions - 1
+      WHERE remaining_sessions > 0
+    ''');
   }
 }

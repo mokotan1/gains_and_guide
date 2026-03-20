@@ -111,7 +111,29 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     final newRpe = [...ex.setRpe];
     newStatus[sIdx] = !newStatus[sIdx];
     newRpe[sIdx] = newStatus[sIdx] ? rpe : null;
-    newState[exIdx] = ex.copyWith(setStatus: newStatus, setRpe: newRpe);
+    final newFailed = [...ex.setFailed];
+    if (newStatus[sIdx]) newFailed[sIdx] = false;
+    newState[exIdx] = ex.copyWith(setStatus: newStatus, setRpe: newRpe, setFailed: newFailed);
+    state = newState;
+    _saveCurrentSession();
+  }
+
+  /// 세트 실패 기록: 실제 완료한 횟수와 RPE 10을 저장
+  void failSet(int exIdx, int sIdx, int actualReps) {
+    final newState = [...state];
+    final ex = newState[exIdx];
+    final newFailed = [...ex.setFailed];
+    final newStatus = [...ex.setStatus];
+    final newRpe = [...ex.setRpe];
+    final newReps = [...ex.setReps];
+    newFailed[sIdx] = true;
+    newStatus[sIdx] = true;
+    newRpe[sIdx] = 10;
+    newReps[sIdx] = actualReps;
+    newState[exIdx] = ex.copyWith(
+      setFailed: newFailed, setStatus: newStatus,
+      setRpe: newRpe, setReps: newReps,
+    );
     state = newState;
     _saveCurrentSession();
   }
@@ -170,7 +192,33 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
         ));
       }
 
-      final rec = await _deloadService.evaluateDeloadNeed(updatedRoutine);
+      final cycleSessions = _currentWeeklyRoutine.length;
+      var rec = await _deloadService.evaluateDeloadNeed(updatedRoutine);
+
+      if (rec.shouldDeload && rec.cycleSessions != cycleSessions) {
+        rec = DeloadRecommendation(
+          shouldDeload: true,
+          totalScore: rec.totalScore,
+          signals: rec.signals,
+          reductionRatio: rec.reductionRatio,
+          cycleSessions: cycleSessions,
+          summary: rec.summary,
+        );
+      }
+
+      // TODO: 수동 디로드 강제 적용 — 디로드 주간 종료 후 이 블록 제거
+      if (!rec.shouldDeload) {
+        rec = DeloadRecommendation(
+          shouldDeload: true,
+          totalScore: 65.0,
+          signals: rec.signals,
+          reductionRatio: 0.60,
+          cycleSessions: cycleSessions,
+          summary: '수동 디로드 적용 (65점)',
+        );
+      }
+      // TODO: 여기까지 제거
+
       deloadRecommendation = rec;
 
       if (rec.shouldDeload) {
@@ -259,43 +307,48 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   }
 
   Future<void> saveCurrentWorkoutToHistory() async {
-    final now = DateTime.now().toString().split(' ')[0]; // YYYY-MM-DD로 통일
+    final now = DateTime.now().toString().split(' ')[0];
     final List<Map<String, dynamic>> historyData = [];
 
     for (var ex in state) {
+      int successSets = 0;
       int countBelow3 = 0;
       int countBelow8 = 0;
-      int completedSets = 0;
 
       for (int i = 0; i < ex.sets; i++) {
-        if (ex.setStatus[i]) {
-          completedSets++;
-          int rpe = ex.setRpe[i] ?? WorkoutConstants.defaultRpe;
+        if (!ex.setStatus[i]) continue;
+
+        final bool failed = ex.setFailed[i];
+        int rpe = ex.setRpe[i] ?? WorkoutConstants.defaultRpe;
+
+        if (!failed) {
+          successSets++;
           if (rpe < WorkoutConstants.rpeThresholdForFullIncrement) countBelow3++;
           if (rpe < WorkoutConstants.rpeThresholdForHalfIncrement) countBelow8++;
-
-          historyData.add({
-            'name': ex.name,
-            'sets': i + 1,
-            'reps': ex.setReps[i],
-            'weight': ex.setWeights[i],
-            'rpe': rpe,
-            'date': now,
-          });
         }
+
+        historyData.add({
+          'name': ex.name,
+          'sets': i + 1,
+          'reps': ex.setReps[i],
+          'weight': ex.setWeights[i],
+          'rpe': rpe,
+          'date': now,
+        });
       }
 
       final isDeloading = deloadRecommendation?.shouldDeload ?? false;
-      if (completedSets > 0 && !ex.isCardio && !isDeloading) {
+      final hasFailures = ex.failedSetCount > 0;
+      if (successSets > 0 && !ex.isCardio && !isDeloading && !hasFailures) {
         final double maxSetWeight = ex.setWeights
             .asMap().entries
-            .where((e) => ex.setStatus[e.key])
+            .where((e) => ex.setStatus[e.key] && !ex.setFailed[e.key])
             .fold(0.0, (prev, e) => e.value > prev ? e.value : prev);
         double newWeight = maxSetWeight > 0 ? maxSetWeight : ex.weight;
-        if (countBelow3 >= completedSets) {
+        if (countBelow3 >= successSets) {
           newWeight += WorkoutConstants.weightIncrementFull;
           await _service.saveProgression(ex.name, newWeight);
-        } else if (countBelow8 >= completedSets) {
+        } else if (countBelow8 >= successSets) {
           newWeight += WorkoutConstants.weightIncrementHalf;
           await _service.saveProgression(ex.name, newWeight);
         }
@@ -304,6 +357,11 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
     if (historyData.isNotEmpty) {
       await _service.saveWorkoutHistory(historyData);
+
+      if (deloadRecommendation?.shouldDeload ?? false) {
+        await _deloadService.completeDeloadSession();
+      }
+
       await _service.clearSession();
       isFinished = false;
     }

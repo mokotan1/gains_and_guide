@@ -16,6 +16,7 @@ class Exercise {
   final List<int?> setRpe;
   final List<double> setWeights;
   final List<int> setReps;
+  final List<bool> setFailed;
   final bool isBodyweight;
   final bool isCardio;
 
@@ -29,10 +30,12 @@ class Exercise {
     this.setRpe = const [],
     List<double>? setWeights,
     List<int>? setReps,
+    List<bool>? setFailed,
     this.isBodyweight = false,
     this.isCardio = false,
   })  : setWeights = setWeights ?? List.filled(sets, weight),
-        setReps = setReps ?? List.filled(sets, reps);
+        setReps = setReps ?? List.filled(sets, reps),
+        setFailed = setFailed ?? List.filled(sets, false);
 
   factory Exercise.initial({
     required String id,
@@ -53,10 +56,15 @@ class Exercise {
       setRpe: List.filled(sets, null),
       setWeights: List.filled(sets, weight),
       setReps: List.filled(sets, reps),
+      setFailed: List.filled(sets, false),
       isBodyweight: isBodyweight,
       isCardio: isCardio,
     );
   }
+
+  int get failedSetCount => setFailed.where((f) => f).length;
+  int get completedSetCount => setStatus.where((s) => s).length;
+  int get attemptedSetCount => completedSetCount + failedSetCount;
 
   Exercise copyWith({
     String? id,
@@ -68,6 +76,7 @@ class Exercise {
     List<int?>? setRpe,
     List<double>? setWeights,
     List<int>? setReps,
+    List<bool>? setFailed,
     bool? isBodyweight,
     bool? isCardio,
   }) {
@@ -81,6 +90,7 @@ class Exercise {
       setRpe: setRpe ?? this.setRpe,
       setWeights: setWeights ?? this.setWeights,
       setReps: setReps ?? this.setReps,
+      setFailed: setFailed ?? this.setFailed,
       isBodyweight: isBodyweight ?? this.isBodyweight,
       isCardio: isCardio ?? this.isCardio,
     );
@@ -96,6 +106,7 @@ class Exercise {
     'setRpe': setRpe,
     'setWeights': setWeights,
     'setReps': setReps,
+    'setFailed': setFailed,
     'isBodyweight': isBodyweight,
     'isCardio': isCardio,
   };
@@ -141,6 +152,7 @@ class Exercise {
     final setRpe = _parseNullableIntList(json['setRpe'], sets);
     final setWeights = _parseDoubleList(json['setWeights'], sets, weight);
     final setReps = _parseIntList(json['setReps'], sets, reps);
+    final setFailed = _parseBoolList(json['setFailed'], sets);
 
     return Exercise(
       id: id,
@@ -152,6 +164,7 @@ class Exercise {
       setRpe: setRpe,
       setWeights: setWeights,
       setReps: setReps,
+      setFailed: setFailed,
       isBodyweight: json['isBodyweight'] == true,
       isCardio: json['isCardio'] == true,
     );

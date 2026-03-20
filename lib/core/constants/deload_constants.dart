@@ -44,5 +44,7 @@ class DeloadConstants {
   // 디로드 적용
   // ---------------------------------------------------------------------------
   static const double deloadWeightReductionRatio = 0.60;
-  static const int deloadDurationDays = 7;
+
+  /// 사이클 세션 수를 계산할 수 없을 때 사용하는 기본값
+  static const int defaultDeloadCycleSessions = 3;
 }

@@ -190,7 +190,7 @@ void main() {
       expect(
           rec.totalScore, greaterThanOrEqualTo(DeloadConstants.fatigueScoreThreshold));
       expect(rec.reductionRatio, DeloadConstants.deloadWeightReductionRatio);
-      expect(rec.durationDays, DeloadConstants.deloadDurationDays);
+      expect(rec.cycleSessions, DeloadConstants.defaultDeloadCycleSessions);
       expect(rec.summary, isNotEmpty);
     });
 
