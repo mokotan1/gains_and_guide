@@ -102,6 +102,38 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     _saveCurrentSession();
   }
 
+  void updateSetWeight(int exIdx, int sIdx, double newWeight, {bool applyToRemaining = false}) {
+    final newState = [...state];
+    final ex = newState[exIdx];
+    final weights = [...ex.setWeights];
+    if (applyToRemaining) {
+      for (int i = sIdx; i < weights.length; i++) {
+        weights[i] = newWeight;
+      }
+    } else {
+      weights[sIdx] = newWeight;
+    }
+    newState[exIdx] = ex.copyWith(setWeights: weights);
+    state = newState;
+    _saveCurrentSession();
+  }
+
+  void updateSetReps(int exIdx, int sIdx, int newReps, {bool applyToRemaining = false}) {
+    final newState = [...state];
+    final ex = newState[exIdx];
+    final repsList = [...ex.setReps];
+    if (applyToRemaining) {
+      for (int i = sIdx; i < repsList.length; i++) {
+        repsList[i] = newReps;
+      }
+    } else {
+      repsList[sIdx] = newReps;
+    }
+    newState[exIdx] = ex.copyWith(setReps: repsList);
+    state = newState;
+    _saveCurrentSession();
+  }
+
   Future<void> updateRoutineByDay() async {
     final weekday = DateTime.now().weekday;
     List<Exercise> routine = _currentWeeklyRoutine[weekday] ?? [];
@@ -114,9 +146,11 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     if (routine.isNotEmpty) {
       final List<Exercise> updatedRoutine = [];
       for (var ex in routine) {
-        final latestWeight = await _service.getLatestWeight(ex.name);
+        final w = await _service.getLatestWeight(ex.name) ?? ex.weight;
         updatedRoutine.add(ex.copyWith(
-          weight: latestWeight ?? ex.weight,
+          weight: w,
+          setWeights: List.filled(ex.sets, w),
+          setReps: List.filled(ex.sets, ex.reps),
           setStatus: List.filled(ex.sets, false),
           setRpe: List.filled(ex.sets, null),
         ));
@@ -152,14 +186,14 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
         .toSet();
 
     final routineA = [
-      Exercise.initial(id: 's1_a', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
-      Exercise.initial(id: 's2_a', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 80),
-      Exercise.initial(id: 's3_a', name: '펜들레이 로우', sets: 5, reps: 5, weight: 80),
+      Exercise.initial(id: 's1_a', name: '백 스쿼트', sets: 5, reps: 5, weight: 0),
+      Exercise.initial(id: 's2_a', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 0),
+      Exercise.initial(id: 's3_a', name: '펜들레이 로우', sets: 5, reps: 5, weight: 0),
     ];
     final routineB = [
-      Exercise.initial(id: 's1_b', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
-      Exercise.initial(id: 's4_b', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 55),
-      Exercise.initial(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 145),
+      Exercise.initial(id: 's1_b', name: '백 스쿼트', sets: 5, reps: 5, weight: 0),
+      Exercise.initial(id: 's4_b', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 0),
+      Exercise.initial(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 0),
     ];
 
     final bool lastWasA = lastExercises.any(
@@ -219,8 +253,8 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
           historyData.add({
             'name': ex.name,
             'sets': i + 1,
-            'reps': ex.reps,
-            'weight': ex.weight,
+            'reps': ex.setReps[i],
+            'weight': ex.setWeights[i],
             'rpe': rpe,
             'date': now,
           });
@@ -228,11 +262,15 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
       }
 
       if (completedSets > 0 && !ex.isCardio) {
-        double newWeight = ex.weight;
-        if (countBelow3 >= ex.sets) {
+        final double maxSetWeight = ex.setWeights
+            .asMap().entries
+            .where((e) => ex.setStatus[e.key])
+            .fold(0.0, (prev, e) => e.value > prev ? e.value : prev);
+        double newWeight = maxSetWeight > 0 ? maxSetWeight : ex.weight;
+        if (countBelow3 >= completedSets) {
           newWeight += WorkoutConstants.weightIncrementFull;
           await _service.saveProgression(ex.name, newWeight);
-        } else if (countBelow8 >= ex.sets) {
+        } else if (countBelow8 >= completedSets) {
           newWeight += WorkoutConstants.weightIncrementHalf;
           await _service.saveProgression(ex.name, newWeight);
         }

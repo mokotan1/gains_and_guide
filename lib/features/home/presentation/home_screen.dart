@@ -70,16 +70,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     String today = DateTime.now().toString().split(' ')[0];
     if (!grouped.containsKey(today)) {
       for (var ex in currentExercises) {
-        final completedRpes = ex.setRpe.asMap().entries
+        final completedEntries = ex.setRpe.asMap().entries
             .where((entry) => ex.setStatus[entry.key])
-            .map((entry) => entry.value ?? 8)
             .toList();
-            
-        if (completedRpes.isNotEmpty) {
-          String rpeStr = completedRpes.join('|');
-          double volume = ex.weight * ex.reps * completedRpes.length;
-          double avgRpe = completedRpes.fold(0, (a, b) => a + b) / completedRpes.length;
-          
+
+        if (completedEntries.isNotEmpty) {
+          String rpeStr = completedEntries.map((e) => e.value ?? 8).join('|');
+          double volume = completedEntries.fold(0.0,
+              (prev, e) => prev + ex.setWeights[e.key] * ex.setReps[e.key]);
+          double avgRpe = completedEntries.fold(0.0,
+              (prev, e) => prev + (e.value ?? 8)) / completedEntries.length;
+
           csv += "$today,${ex.name},${ex.weight},${ex.sets},${ex.reps},$rpeStr,${volume.toStringAsFixed(1)},${avgRpe.toStringAsFixed(1)}\n";
         }
       }
@@ -711,6 +712,137 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  void _showSetEditDialog(int exIdx, int sIdx, Exercise ex) {
+    double weight = ex.setWeights[sIdx];
+    int reps = ex.setReps[sIdx];
+    bool applyToRemaining = sIdx < ex.sets - 1;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Widget counter(String label, String valueStr, VoidCallback onDec, VoidCallback onInc) {
+            return Column(
+              children: [
+                Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: onDec,
+                      icon: const Icon(Icons.remove_circle_outline, color: AppTheme.primaryBlue),
+                      constraints: const BoxConstraints(), padding: EdgeInsets.zero,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(valueStr, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: onInc,
+                      icon: const Icon(Icons.add_circle_outline, color: AppTheme.primaryBlue),
+                      constraints: const BoxConstraints(), padding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return AlertDialog(
+            title: Text('세트 ${sIdx + 1} 조정'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!ex.isBodyweight && !ex.isCardio)
+                  counter(
+                    '무게 (kg)',
+                    weight.toStringAsFixed(1),
+                    () => setDialogState(() => weight = (weight - 2.5).clamp(0.0, 500.0)),
+                    () => setDialogState(() => weight += 2.5),
+                  ),
+                const SizedBox(height: 16),
+                counter(
+                  ex.isCardio ? '시간 (분)' : '횟수',
+                  '$reps',
+                  () => setDialogState(() => reps = (reps - 1).clamp(1, 100)),
+                  () => setDialogState(() => reps += 1),
+                ),
+                if (sIdx < ex.sets - 1) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: applyToRemaining,
+                        onChanged: (v) => setDialogState(() => applyToRemaining = v ?? false),
+                      ),
+                      const Expanded(child: Text('이후 세트에도 적용', style: TextStyle(fontSize: 13))),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+              ElevatedButton(
+                onPressed: () {
+                  final notifier = ref.read(workoutProvider.notifier);
+                  if (!ex.isBodyweight && !ex.isCardio) {
+                    notifier.updateSetWeight(exIdx, sIdx, weight, applyToRemaining: applyToRemaining);
+                  }
+                  notifier.updateSetReps(exIdx, sIdx, reps, applyToRemaining: applyToRemaining);
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryBlue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('확인'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSetRow(Exercise ex, int exIdx, int sIdx, bool isFinished) {
+    final setWeight = ex.setWeights[sIdx];
+    final setRep = ex.setReps[sIdx];
+    final isDone = ex.setStatus[sIdx];
+
+    final String label = ex.isCardio
+        ? '목표 시간: ${setRep}분'
+        : '${setWeight.toStringAsFixed(1)}kg × ${setRep}회';
+
+    return ListTile(
+      dense: true,
+      leading: CircleAvatar(
+        radius: 14,
+        backgroundColor: isDone ? AppTheme.successGreen : Colors.grey[300],
+        child: Text(
+          '${sIdx + 1}',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDone ? Colors.white : Colors.black54),
+        ),
+      ),
+      title: GestureDetector(
+        onTap: isFinished ? null : () => _showSetEditDialog(exIdx, sIdx, ex),
+        child: Row(
+          children: [
+            Text(label, style: TextStyle(color: isDone ? Colors.black38 : Colors.black87, decoration: isDone ? TextDecoration.lineThrough : null)),
+            if (!isFinished && !isDone) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.edit, size: 14, color: Colors.grey[400]),
+            ],
+          ],
+        ),
+      ),
+      trailing: Checkbox(
+        value: isDone,
+        onChanged: isFinished ? null : (v) => _toggleSetStatus(exIdx, sIdx, ref.read(workoutProvider)),
+      ),
+    );
+  }
+
   Widget _buildExerciseList(List<Exercise> exercises, bool isFinished) {
     return Opacity(
       opacity: isFinished ? 0.6 : 1.0,
@@ -736,19 +868,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               ),
               subtitle: Text(
-                ex.isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | ${ex.reps}회 | ${ex.weight}kg',
+                ex.isCardio ? '${ex.reps}분 수행' : '${ex.sets}세트 | 기본 ${ex.reps}회 | ${ex.weight.toStringAsFixed(1)}kg',
                 style: const TextStyle(color: Colors.black54),
               ),
-              children: List.generate(ex.sets, (sIdx) => ListTile(
-                title: Text(
-                  ex.isCardio ? '목표 시간: ${ex.reps}분' : '${ex.weight}kg / ${ex.reps}회',
-                  style: const TextStyle(color: Colors.black87),
-                ),
-                trailing: Checkbox(
-                  value: ex.setStatus[sIdx],
-                  onChanged: isFinished ? null : (v) => _toggleSetStatus(idx, sIdx, exercises),
-                ),
-              )),
+              children: List.generate(ex.sets, (sIdx) => _buildSetRow(ex, idx, sIdx, isFinished)),
             ),
           );
         },

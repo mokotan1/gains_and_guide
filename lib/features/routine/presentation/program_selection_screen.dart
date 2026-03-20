@@ -33,22 +33,22 @@ class ProgramSelectionScreen extends ConsumerWidget {
       WeeklyProgram(
         title: 'Stronglifts 5x5 (Master Custom)',
         level: '초중급 스트렝스',
-        description: '주인님의 현재 중량(스쿼트 100kg+, 데드리프트 145kg+)에 맞춘 커스텀 5x5 루틴입니다.',
+        description: 'A/B 코스가 자동 교대됩니다. 중량은 운동 기록에서 자동 반영됩니다.',
         weeklyExercises: {
           1: [ // 월 (Workout A)
-            Exercise.initial(id: 's1_a', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
-            Exercise.initial(id: 's2_a', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 80),
-            Exercise.initial(id: 's3_a', name: '펜들레이 로우', sets: 5, reps: 5, weight: 80),
+            Exercise.initial(id: 's1_a', name: '백 스쿼트', sets: 5, reps: 5, weight: 0),
+            Exercise.initial(id: 's2_a', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 0),
+            Exercise.initial(id: 's3_a', name: '펜들레이 로우', sets: 5, reps: 5, weight: 0),
           ],
           3: [ // 수 (Workout B)
-            Exercise.initial(id: 's1_b', name: '백 스쿼트', sets: 5, reps: 5, weight: 100),
-            Exercise.initial(id: 's4_b', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 55),
-            Exercise.initial(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 145),
+            Exercise.initial(id: 's1_b', name: '백 스쿼트', sets: 5, reps: 5, weight: 0),
+            Exercise.initial(id: 's4_b', name: '오버헤드 프레스 (OHP)', sets: 5, reps: 5, weight: 0),
+            Exercise.initial(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 0),
           ],
           5: [ // 금 (Workout A 다시)
-            Exercise.initial(id: 's1_c', name: '백 스쿼트', sets: 5, reps: 5, weight: 102.5),
-            Exercise.initial(id: 's2_c', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 82.5),
-            Exercise.initial(id: 's3_c', name: '펜들레이 로우', sets: 5, reps: 5, weight: 82.5),
+            Exercise.initial(id: 's1_c', name: '백 스쿼트', sets: 5, reps: 5, weight: 0),
+            Exercise.initial(id: 's2_c', name: '플랫 벤치 프레스', sets: 5, reps: 5, weight: 0),
+            Exercise.initial(id: 's3_c', name: '펜들레이 로우', sets: 5, reps: 5, weight: 0),
           ],
         },
         icon: Icons.fitness_center,

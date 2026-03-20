@@ -14,6 +14,8 @@ class Exercise {
   final double weight;
   final List<bool> setStatus;
   final List<int?> setRpe;
+  final List<double> setWeights;
+  final List<int> setReps;
   final bool isBodyweight;
   final bool isCardio;
 
@@ -25,9 +27,12 @@ class Exercise {
     required this.weight,
     this.setStatus = const [],
     this.setRpe = const [],
+    List<double>? setWeights,
+    List<int>? setReps,
     this.isBodyweight = false,
     this.isCardio = false,
-  });
+  })  : setWeights = setWeights ?? List.filled(sets, weight),
+        setReps = setReps ?? List.filled(sets, reps);
 
   factory Exercise.initial({
     required String id,
@@ -46,6 +51,8 @@ class Exercise {
       weight: weight,
       setStatus: List.filled(sets, false),
       setRpe: List.filled(sets, null),
+      setWeights: List.filled(sets, weight),
+      setReps: List.filled(sets, reps),
       isBodyweight: isBodyweight,
       isCardio: isCardio,
     );
@@ -59,6 +66,8 @@ class Exercise {
     double? weight,
     List<bool>? setStatus,
     List<int?>? setRpe,
+    List<double>? setWeights,
+    List<int>? setReps,
     bool? isBodyweight,
     bool? isCardio,
   }) {
@@ -70,6 +79,8 @@ class Exercise {
       weight: weight ?? this.weight,
       setStatus: setStatus ?? this.setStatus,
       setRpe: setRpe ?? this.setRpe,
+      setWeights: setWeights ?? this.setWeights,
+      setReps: setReps ?? this.setReps,
       isBodyweight: isBodyweight ?? this.isBodyweight,
       isCardio: isCardio ?? this.isCardio,
     );
@@ -83,6 +94,8 @@ class Exercise {
     'weight': weight,
     'setStatus': setStatus,
     'setRpe': setRpe,
+    'setWeights': setWeights,
+    'setReps': setReps,
     'isBodyweight': isBodyweight,
     'isCardio': isCardio,
   };
@@ -126,6 +139,8 @@ class Exercise {
 
     final setStatus = _parseBoolList(json['setStatus'], sets);
     final setRpe = _parseNullableIntList(json['setRpe'], sets);
+    final setWeights = _parseDoubleList(json['setWeights'], sets, weight);
+    final setReps = _parseIntList(json['setReps'], sets, reps);
 
     return Exercise(
       id: id,
@@ -135,6 +150,8 @@ class Exercise {
       weight: weight,
       setStatus: setStatus,
       setRpe: setRpe,
+      setWeights: setWeights,
+      setReps: setReps,
       isBodyweight: json['isBodyweight'] == true,
       isCardio: json['isCardio'] == true,
     );
@@ -174,6 +191,29 @@ class Exercise {
       if (e == null) continue;
       if (e is int) result[i] = e;
       else result[i] = int.tryParse(e.toString());
+    }
+    return result;
+  }
+
+  static List<double> _parseDoubleList(dynamic v, int length, double fallback) {
+    final result = List<double>.filled(length, fallback);
+    if (v is! List || length <= 0) return result;
+    for (int i = 0; i < length && i < v.length; i++) {
+      final e = v[i];
+      if (e is num) result[i] = e.toDouble();
+      else if (e != null) result[i] = double.tryParse(e.toString()) ?? fallback;
+    }
+    return result;
+  }
+
+  static List<int> _parseIntList(dynamic v, int length, int fallback) {
+    final result = List<int>.filled(length, fallback);
+    if (v is! List || length <= 0) return result;
+    for (int i = 0; i < length && i < v.length; i++) {
+      final e = v[i];
+      if (e is int) result[i] = e;
+      else if (e is num) result[i] = e.toInt();
+      else if (e != null) result[i] = int.tryParse(e.toString()) ?? fallback;
     }
     return result;
   }
