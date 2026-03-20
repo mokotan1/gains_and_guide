@@ -16,9 +16,11 @@ class WorkoutConstants {
   /// Stronglifts 5x5 A/B 코스 구분용 (직전 운동에 있으면 다음은 반대 코스)
   static const List<String> strongliftsRoutineAKeys = [
     '플랫 벤치 프레스',
+    '펜들레이 로우',
   ];
   static const List<String> strongliftsRoutineBKeys = [
     '오버헤드 프레스 (OHP)',
+    '컨벤셔널 데드리프트',
   ];
 
   /// A/B 코스의 메인 운동 이름 (이것만 A/B 교체 대상, 나머지는 보조로 유지)

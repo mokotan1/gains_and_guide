@@ -128,9 +128,16 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     _saveCurrentSession();
   }
 
+  /// A/B 양쪽 메인 운동 이름 (보조 운동 필터링에 사용)
+  static final Set<String> _allStrongliftsMainNames = {
+    ...WorkoutConstants.strongliftsMainA,
+    ...WorkoutConstants.strongliftsMainB,
+  };
+
   /// 기록 기반 Stronglifts 5x5 A/B 코스 교차 로직
   /// - workout_history는 date DESC로 조회되므로 첫 행이 가장 최근 날짜
   /// - 날짜는 항상 YYYY-MM-DD로 정규화해 비교 (DB/시간대 차이 대비)
+  /// - A-key(벤치) 또는 B-key(OHP) 외에 데드리프트도 B 판별에 사용
   Future<List<Exercise>> _getSmartStrongliftsRoutine(List<Exercise> defaultRoutine) async {
     final history = await _service.getAllHistory();
     if (history.isEmpty) return defaultRoutine;
@@ -155,24 +162,30 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
       Exercise.initial(id: 's5_b', name: '컨벤셔널 데드리프트', sets: 1, reps: 5, weight: 145),
     ];
 
-    if (lastExercises.any((e) => WorkoutConstants.strongliftsRoutineAKeys.contains(e))) {
-      return _mergeWithAccessories(routineB, defaultRoutine, WorkoutConstants.strongliftsMainB);
+    final bool lastWasA = lastExercises.any(
+        (e) => WorkoutConstants.strongliftsRoutineAKeys.contains(e));
+    final bool lastWasB = lastExercises.any(
+        (e) => WorkoutConstants.strongliftsRoutineBKeys.contains(e) ||
+               e == '컨벤셔널 데드리프트');
+
+    if (lastWasA && !lastWasB) {
+      return _mergeWithAccessories(routineB, defaultRoutine);
     }
-    if (lastExercises.any((e) => WorkoutConstants.strongliftsRoutineBKeys.contains(e))) {
-      return _mergeWithAccessories(routineA, defaultRoutine, WorkoutConstants.strongliftsMainA);
+    if (lastWasB && !lastWasA) {
+      return _mergeWithAccessories(routineA, defaultRoutine);
     }
 
     return defaultRoutine;
   }
 
-  /// 메인 루틴(A 또는 B) 뒤에, 그날 루틴에 있던 보조 운동을 그대로 붙임
+  /// 메인 루틴(A 또는 B) 뒤에, 사용자가 직접 추가한 보조 운동만 붙임
+  /// A/B 양쪽 메인 운동은 모두 제외하여 교차 오염을 방지
   static List<Exercise> _mergeWithAccessories(
     List<Exercise> mainRoutine,
     List<Exercise> dayRoutine,
-    List<String> mainNames,
   ) {
     final accessories = dayRoutine
-        .where((e) => !mainNames.contains(e.name))
+        .where((e) => !_allStrongliftsMainNames.contains(e.name))
         .toList();
     if (accessories.isEmpty) return mainRoutine;
     return [...mainRoutine, ...accessories];
