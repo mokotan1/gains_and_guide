@@ -14,4 +14,15 @@ class WorkoutHistoryRepositoryImpl implements WorkoutHistoryRepository {
   @override
   Future<void> saveWorkoutHistory(List<Map<String, dynamic>> history) =>
       _db.saveWorkoutHistory(history);
+
+  @override
+  Future<List<Map<String, dynamic>>> getRecentSessionsByExercise(
+    String exerciseName,
+    int sessionLimit,
+  ) =>
+      _db.getRecentSessionsByExercise(exerciseName, sessionLimit);
+
+  @override
+  Future<List<Map<String, dynamic>>> getRecentSessions(int sessionLimit) =>
+      _db.getRecentSessions(sessionLimit);
 }

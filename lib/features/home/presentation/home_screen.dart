@@ -9,6 +9,8 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/workout_provider.dart';
+import '../../deload/presentation/deload_banner_widget.dart';
+import '../../deload/presentation/deload_prediction_card.dart';
 import '../../routine/domain/exercise.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -648,7 +650,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final exercises = ref.watch(workoutProvider);
-    final isFinished = ref.watch(workoutProvider.notifier).isFinished;
+    final notifier = ref.watch(workoutProvider.notifier);
+    final isFinished = notifier.isFinished;
+    final deloadRec = notifier.deloadRecommendation;
 
     int totalSets = 0, completedSets = 0;
     for (var ex in exercises) {
@@ -671,6 +675,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            if (deloadRec != null && deloadRec.shouldDeload)
+              DeloadBannerWidget(recommendation: deloadRec)
+            else if (deloadRec != null)
+              DeloadPredictionCard(recommendation: deloadRec),
             _buildProgressCard(completedSets, totalSets),
             const SizedBox(height: 16),
             _buildExerciseList(exercises, isFinished),

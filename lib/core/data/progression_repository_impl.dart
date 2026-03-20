@@ -14,4 +14,11 @@ class ProgressionRepositoryImpl implements ProgressionRepository {
   @override
   Future<void> saveProgression(String exerciseName, double weight) =>
       _db.saveProgression(exerciseName, weight);
+
+  @override
+  Future<List<Map<String, dynamic>>> getRecentProgressions(
+    String exerciseName,
+    int limit,
+  ) =>
+      _db.getRecentProgressions(exerciseName, limit);
 }

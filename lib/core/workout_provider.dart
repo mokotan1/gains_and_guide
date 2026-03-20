@@ -1,16 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../features/deload/application/deload_service.dart';
 import '../features/routine/domain/exercise.dart';
 import '../features/routine/application/workout_service.dart';
 import 'constants/workout_constants.dart';
+import 'domain/models/deload_recommendation.dart';
 
 class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   final WorkoutService _service;
+  final DeloadService _deloadService;
 
-  WorkoutNotifier(this._service) : super([]) {
+  WorkoutNotifier(this._service, this._deloadService) : super([]) {
     _loadAllData();
   }
 
   bool isFinished = false;
+  DeloadRecommendation? deloadRecommendation;
   final Map<int, List<Exercise>> _currentWeeklyRoutine = {};
 
   Future<void> _loadAllData() async {
@@ -28,10 +32,20 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
       if (session != null) {
         state = session;
         isFinished = await _service.getIsFinished();
+        await _refreshFatigueScore();
       } else {
         await updateRoutineByDay();
       }
     }
+  }
+
+  /// 현재 state 기반으로 피로도만 재평가 (무게 변경 없이 점수만 갱신)
+  Future<void> _refreshFatigueScore() async {
+    if (state.isEmpty) {
+      deloadRecommendation = null;
+      return;
+    }
+    deloadRecommendation = await _deloadService.evaluateDeloadNeed(state);
   }
 
   Future<void> applyProgression(List<dynamic> progressions) async {
@@ -155,8 +169,18 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
           setRpe: List.filled(ex.sets, null),
         ));
       }
-      state = updatedRoutine;
+
+      final rec = await _deloadService.evaluateDeloadNeed(updatedRoutine);
+      deloadRecommendation = rec;
+
+      if (rec.shouldDeload) {
+        state = _deloadService.applyDeload(updatedRoutine, rec);
+        await _deloadService.recordDeload(rec);
+      } else {
+        state = updatedRoutine;
+      }
     } else {
+      deloadRecommendation = null;
       state = [];
     }
     _saveCurrentSession();
@@ -261,7 +285,8 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
         }
       }
 
-      if (completedSets > 0 && !ex.isCardio) {
+      final isDeloading = deloadRecommendation?.shouldDeload ?? false;
+      if (completedSets > 0 && !ex.isCardio && !isDeloading) {
         final double maxSetWeight = ex.setWeights
             .asMap().entries
             .where((e) => ex.setStatus[e.key])
@@ -288,5 +313,6 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 final workoutProvider =
 StateNotifierProvider<WorkoutNotifier, List<Exercise>>((ref) {
   final service = ref.watch(workoutServiceProvider);
-  return WorkoutNotifier(service);
+  final deloadService = ref.watch(deloadServiceProvider);
+  return WorkoutNotifier(service, deloadService);
 });

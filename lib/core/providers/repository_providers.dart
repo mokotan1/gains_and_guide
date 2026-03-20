@@ -2,10 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_helper.dart';
 import '../data/body_profile_repository_impl.dart';
+import '../data/deload_repository_impl.dart';
 import '../data/exercise_catalog_repository_impl.dart';
 import '../data/progression_repository_impl.dart';
 import '../data/workout_history_repository_impl.dart';
 import '../domain/repositories/body_profile_repository.dart';
+import '../domain/repositories/deload_repository.dart';
 import '../domain/repositories/exercise_catalog_repository.dart';
 import '../domain/repositories/progression_repository.dart';
 import '../domain/repositories/workout_history_repository.dart';
@@ -26,4 +28,8 @@ final bodyProfileRepositoryProvider = Provider<BodyProfileRepository>((ref) {
 
 final exerciseCatalogRepositoryProvider = Provider<ExerciseCatalogRepository>((ref) {
   return ExerciseCatalogRepositoryImpl(ref.watch(_dbProvider));
+});
+
+final deloadRepositoryProvider = Provider<DeloadRepository>((ref) {
+  return DeloadRepositoryImpl(ref.watch(_dbProvider));
 });

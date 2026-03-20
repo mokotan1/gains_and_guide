@@ -17,7 +17,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -53,6 +53,19 @@ class DatabaseHelper {
     ''');
     await _createExerciseCatalogTable(db);
     await _createRoutineTables(db);
+    await _createDeloadHistoryTable(db);
+  }
+
+  Future _createDeloadHistoryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS deload_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        reason TEXT,
+        fatigue_score REAL NOT NULL
+      )
+    ''');
   }
 
   Future _createRoutineTables(Database db) async {
@@ -125,6 +138,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 5) {
       await _createRoutineTables(db);
+    }
+    if (oldVersion < 6) {
+      await _createDeloadHistoryTable(db);
     }
   }
 
@@ -216,5 +232,108 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getAllHistory() async {
     final db = await instance.database;
     return await db.query('workout_history', orderBy: 'date DESC');
+  }
+
+  /// 특정 운동의 최근 N개 세션 날짜별 기록 조회 (디로드 분석용)
+  Future<List<Map<String, dynamic>>> getRecentSessionsByExercise(
+    String exerciseName,
+    int sessionLimit,
+  ) async {
+    final db = await instance.database;
+    final dates = await db.rawQuery('''
+      SELECT DISTINCT SUBSTR(date, 1, 10) AS session_date
+      FROM workout_history
+      WHERE name = ?
+      ORDER BY session_date DESC
+      LIMIT ?
+    ''', [exerciseName, sessionLimit]);
+
+    if (dates.isEmpty) return [];
+
+    final dateList = dates.map((d) => d['session_date'] as String).toList();
+    final placeholders = List.filled(dateList.length, '?').join(',');
+
+    return db.rawQuery('''
+      SELECT * FROM workout_history
+      WHERE name = ? AND SUBSTR(date, 1, 10) IN ($placeholders)
+      ORDER BY date DESC
+    ''', [exerciseName, ...dateList]);
+  }
+
+  /// 최근 N개 세션의 전체 기록 조회 (세션 = 고유 날짜)
+  Future<List<Map<String, dynamic>>> getRecentSessions(int sessionLimit) async {
+    final db = await instance.database;
+    final dates = await db.rawQuery('''
+      SELECT DISTINCT SUBSTR(date, 1, 10) AS session_date
+      FROM workout_history
+      ORDER BY session_date DESC
+      LIMIT ?
+    ''', [sessionLimit]);
+
+    if (dates.isEmpty) return [];
+
+    final dateList = dates.map((d) => d['session_date'] as String).toList();
+    final placeholders = List.filled(dateList.length, '?').join(',');
+
+    return db.rawQuery('''
+      SELECT * FROM workout_history
+      WHERE SUBSTR(date, 1, 10) IN ($placeholders)
+      ORDER BY date DESC
+    ''', dateList);
+  }
+
+  /// 특정 운동의 최근 프로그레션 이력 조회
+  Future<List<Map<String, dynamic>>> getRecentProgressions(
+    String exerciseName,
+    int limit,
+  ) async {
+    final db = await instance.database;
+    return db.query(
+      'progression_history',
+      where: 'name = ?',
+      whereArgs: [exerciseName],
+      orderBy: 'date DESC',
+      limit: limit,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Deload history
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveDeloadRecord({
+    required String startDate,
+    required String endDate,
+    required String reason,
+    required double fatigueScore,
+  }) async {
+    final db = await instance.database;
+    await db.insert('deload_history', {
+      'start_date': startDate,
+      'end_date': endDate,
+      'reason': reason,
+      'fatigue_score': fatigueScore,
+    });
+  }
+
+  Future<Map<String, dynamic>?> getLastDeloadRecord() async {
+    final db = await instance.database;
+    final res = await db.query(
+      'deload_history',
+      orderBy: 'end_date DESC',
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  Future<bool> isCurrentlyInDeload() async {
+    final db = await instance.database;
+    final today = DateTime.now().toString().split(' ')[0];
+    final res = await db.rawQuery('''
+      SELECT COUNT(*) AS cnt FROM deload_history
+      WHERE start_date <= ? AND end_date >= ?
+    ''', [today, today]);
+    final count = Sqflite.firstIntValue(res) ?? 0;
+    return count > 0;
   }
 }
