@@ -674,7 +674,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 16),
             _buildExerciseList(exercises, isFinished),
             const SizedBox(height: 24),
-            if (isFinished) _buildFinishedBanner()
+            if (exercises.isEmpty && !isFinished) _buildRestDayBanner()
+            else if (isFinished) _buildFinishedBanner()
             else if (isAllSetsDone) _buildFinishButton(exercises)
             else if (exercises.isNotEmpty) _buildIncompleteMessage(completedSets, totalSets)
           ],
@@ -802,6 +803,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Text(
         '남은 세트를 모두 완료하면 정산 버튼이 나타납니다. ($comp/$tot)',
         style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildRestDayBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.self_improvement, color: Colors.blue[300], size: 48),
+          const SizedBox(height: 12),
+          const Text(
+            '오늘은 휴식일입니다',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '충분한 휴식도 성장의 일부입니다.\n상단 + 버튼으로 운동을 추가할 수 있습니다.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.black54, fontSize: 14),
+          ),
+        ],
       ),
     );
   }

@@ -86,6 +86,7 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     _currentWeeklyRoutine.addAll(weeklyRoutine);
 
     await _service.saveWeeklyProgram(weeklyRoutine);
+    await _service.clearSession();
     await updateRoutineByDay();
   }
 

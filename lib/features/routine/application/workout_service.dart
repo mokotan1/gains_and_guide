@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/routine_repository.dart';
 import '../domain/exercise.dart';
+import '../domain/routine.dart';
 import '../../../core/domain/repositories/progression_repository.dart';
 import '../../../core/domain/repositories/workout_history_repository.dart';
 import '../../../core/providers/repository_providers.dart';
@@ -14,49 +15,71 @@ class WorkoutService {
 
   WorkoutService(this._repository, this._historyRepo, this._progressionRepo);
 
-  static const String _programKey = 'saved_weekly_program';
   static const String _sessionKey = 'current_workout_session';
   static const String _lastDateKey = 'last_session_date';
 
-  Future<Map<int, List<Exercise>>> loadWeeklyProgram() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedProgram = prefs.getString(_programKey);
-    final Map<int, List<Exercise>> routineMap = {};
+  // ---------------------------------------------------------------------------
+  // Weekly program (SQLite)
+  // ---------------------------------------------------------------------------
 
-    if (savedProgram != null) {
-      final decoded = jsonDecode(savedProgram) as Map<String, dynamic>;
-      decoded.forEach((day, list) {
-        routineMap[int.parse(day)] = (list as List)
-            .map((i) => Exercise.fromJson(i as Map<String, dynamic>))
-            .toList();
-      });
-    }
-    return routineMap;
-  }
+  Future<Map<int, List<Exercise>>> loadWeeklyProgram() =>
+      _repository.getWeeklyProgram();
 
   Future<void> saveWeeklyProgram(Map<int, List<Exercise>> weeklyRoutine) async {
-    final prefs = await SharedPreferences.getInstance();
-    final Map<String, dynamic> data = {};
-    weeklyRoutine.forEach((day, exList) {
-      data[day.toString()] = exList.map((e) => e.toJson()).toList();
+    final now = DateTime.now().toString().split(' ')[0];
+
+    final Map<String, List<int>> groupedByExercises = {};
+    weeklyRoutine.forEach((day, exercises) {
+      final key = exercises.map((e) => e.id).join(',');
+      groupedByExercises.putIfAbsent(key, () => []);
+      groupedByExercises[key]!.add(day);
     });
-    await prefs.setString(_programKey, jsonEncode(data));
-    await prefs.setString(_lastDateKey, DateTime.now().toString().split(' ')[0]);
+
+    final List<Routine> routines = [];
+    int index = 0;
+    for (final entry in groupedByExercises.entries) {
+      final weekdays = entry.value;
+      final exercises = weeklyRoutine[weekdays.first]!;
+      final dayLabels = weekdays.map(Routine.weekdayLabel).join('/');
+
+      routines.add(Routine(
+        name: 'Routine ${index + 1} ($dayLabels)',
+        description: '${exercises.length}개 운동',
+        createdAt: now,
+        exercises: exercises,
+        assignedWeekdays: weekdays,
+      ));
+      index++;
+    }
+
+    await _repository.replaceWeeklyProgram(routines);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastDateKey, now);
   }
+
+  // ---------------------------------------------------------------------------
+  // Session management (SharedPreferences - ephemeral data)
+  // ---------------------------------------------------------------------------
 
   Future<List<Exercise>?> loadCurrentSession() async {
     final prefs = await SharedPreferences.getInstance();
     final savedSession = prefs.getString(_sessionKey);
     if (savedSession != null) {
       final List<dynamic> decodedList = jsonDecode(savedSession);
-      return decodedList.map((i) => Exercise.fromJson(i as Map<String, dynamic>)).toList();
+      return decodedList
+          .map((i) => Exercise.fromJson(i as Map<String, dynamic>))
+          .toList();
     }
     return null;
   }
 
   Future<void> saveCurrentSession(List<Exercise> state, bool isFinished) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sessionKey, jsonEncode(state.map((e) => e.toJson()).toList()));
+    await prefs.setString(
+      _sessionKey,
+      jsonEncode(state.map((e) => e.toJson()).toList()),
+    );
     await prefs.setBool('is_workout_finished', isFinished);
   }
 
@@ -80,6 +103,10 @@ class WorkoutService {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('is_workout_finished') ?? false;
   }
+
+  // ---------------------------------------------------------------------------
+  // Delegated repository calls
+  // ---------------------------------------------------------------------------
 
   Future<double?> getLatestWeight(String name) =>
       _progressionRepo.getLatestWeight(name);

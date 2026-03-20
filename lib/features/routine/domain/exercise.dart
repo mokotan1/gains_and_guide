@@ -87,6 +87,33 @@ class Exercise {
     'isCardio': isCardio,
   };
 
+  Map<String, dynamic> toDbRow(int routineId, int sortOrder) => {
+    'routine_id': routineId,
+    'exercise_id': id,
+    'name': name,
+    'sets': sets,
+    'reps': reps,
+    'weight': weight,
+    'sort_order': sortOrder,
+    'is_bodyweight': isBodyweight ? 1 : 0,
+    'is_cardio': isCardio ? 1 : 0,
+  };
+
+  factory Exercise.fromDbRow(Map<String, dynamic> row) {
+    final sets = row['sets'] as int? ?? 3;
+    return Exercise(
+      id: row['exercise_id']?.toString() ?? '',
+      name: row['name']?.toString() ?? '',
+      sets: sets,
+      reps: row['reps'] as int? ?? 10,
+      weight: (row['weight'] as num?)?.toDouble() ?? 0.0,
+      setStatus: List.filled(sets, false),
+      setRpe: List.filled(sets, null),
+      isBodyweight: row['is_bodyweight'] == 1,
+      isCardio: row['is_cardio'] == 1,
+    );
+  }
+
   factory Exercise.fromJson(Map<String, dynamic> json) {
     final id = json['id']?.toString();
     final name = json['name']?.toString();

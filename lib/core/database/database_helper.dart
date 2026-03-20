@@ -17,9 +17,12 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 4, // 버전을 3에서 4로 올림
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
     );
   }
 
@@ -48,8 +51,42 @@ class DatabaseHelper {
         weight REAL, date TEXT
       )
     ''');
-    // exercise_catalog 테이블 생성
     await _createExerciseCatalogTable(db);
+    await _createRoutineTables(db);
+  }
+
+  Future _createRoutineTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE routine (
+        _id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE routine_exercises (
+        _id INTEGER PRIMARY KEY AUTOINCREMENT,
+        routine_id INTEGER NOT NULL,
+        exercise_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        sets INTEGER NOT NULL DEFAULT 3,
+        reps INTEGER NOT NULL DEFAULT 10,
+        weight REAL NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_bodyweight INTEGER NOT NULL DEFAULT 0,
+        is_cardio INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (routine_id) REFERENCES routine(_id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE weekly_schedule (
+        _id INTEGER PRIMARY KEY AUTOINCREMENT,
+        routine_id INTEGER NOT NULL,
+        weekday INTEGER NOT NULL,
+        FOREIGN KEY (routine_id) REFERENCES routine(_id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future _createExerciseCatalogTable(Database db) async {
@@ -85,6 +122,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 4) {
       await _createExerciseCatalogTable(db);
+    }
+    if (oldVersion < 5) {
+      await _createRoutineTables(db);
     }
   }
 
