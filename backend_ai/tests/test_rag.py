@@ -14,7 +14,7 @@ from services.rag import (
     create_rag_service,
     load_chunks_jsonl,
 )
-from services.rag_types import RetrievedChunk, format_references
+from services.rag_types import RetrievedChunk, format_references, rag_snippet_max_chars_from_env
 
 
 class TestRagService(unittest.TestCase):
@@ -109,6 +109,34 @@ class TestRagService(unittest.TestCase):
         )
         self.assertIn("...", s)
         self.assertLess(len(s), len(long_text) + 100)
+
+    def test_format_references_respects_max_snippet_override(self) -> None:
+        long_text = "y" * 200
+        s = format_references(
+            [
+                RetrievedChunk(
+                    chunk_id="1",
+                    text=long_text,
+                    source="s",
+                    topic="t",
+                    score=1.0,
+                )
+            ],
+            max_snippet_chars=50,
+        )
+        self.assertIn("...", s)
+        self.assertLessEqual(len(s), 120)
+
+    def test_rag_snippet_max_chars_from_env_invalid_falls_back(self) -> None:
+        old = os.environ.get("RAG_SNIPPET_MAX_CHARS")
+        try:
+            os.environ["RAG_SNIPPET_MAX_CHARS"] = "not-a-number"
+            self.assertEqual(rag_snippet_max_chars_from_env(), 600)
+        finally:
+            if old is None:
+                os.environ.pop("RAG_SNIPPET_MAX_CHARS", None)
+            else:
+                os.environ["RAG_SNIPPET_MAX_CHARS"] = old
 
 
 class TestCreateRagService(unittest.TestCase):

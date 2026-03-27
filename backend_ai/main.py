@@ -14,6 +14,7 @@ import catalog
 import prompts
 from graphs.coach_graph import build_coach_agent
 from rate_limits import limiter
+from services.groq_settings import groq_max_completion_tokens, groq_model_name
 from routers.auth import router as auth_router
 from routers.coach import router as coach_router
 from routers.memory import router as memory_router
@@ -38,7 +39,11 @@ if GROQ_API_KEY:
     app_deps.groq_client = Groq(api_key=GROQ_API_KEY)
     logger.info("✅ Groq API Key가 로드되었습니다. (Llama 3 활성화 완료)")
     try:
-        app_deps.coach_agent = build_coach_agent(GROQ_API_KEY)
+        app_deps.coach_agent = build_coach_agent(
+            GROQ_API_KEY,
+            model=groq_model_name(),
+            max_tokens=groq_max_completion_tokens(),
+        )
         logger.info("✅ LangGraph 코치 에이전트(도구 호출) 준비 완료")
     except Exception as e:
         logger.error("❌ 코치 에이전트 초기화 실패 — USE_LEGACY_CHAT 또는 키 확인: %s", e)

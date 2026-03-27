@@ -12,11 +12,12 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_groq import ChatGroq
 from langgraph.prebuilt import create_react_agent
 
+from services.groq_settings import groq_max_completion_tokens, groq_model_name
 from services.tools import COACH_TOOLS
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "llama-3.1-8b-instant"
+DEFAULT_MODEL = groq_model_name()
 
 _JSON_FINAL_INSTRUCTION = (
     "도구가 더 필요 없으면, 최종 메시지는 오직 하나의 JSON 객체만 포함해야 한다. "
@@ -55,8 +56,20 @@ def _audit_tool_calls(messages: List[BaseMessage]) -> None:
             )
 
 
-def build_coach_agent(groq_api_key: str, model: str = DEFAULT_MODEL) -> Any:
-    llm = ChatGroq(api_key=groq_api_key, model=model, temperature=0.7)
+def build_coach_agent(
+    groq_api_key: str,
+    model: str | None = None,
+    *,
+    max_tokens: int | None = None,
+) -> Any:
+    resolved_model = (model or "").strip() or groq_model_name()
+    cap = max_tokens if max_tokens is not None else groq_max_completion_tokens()
+    llm = ChatGroq(
+        api_key=groq_api_key,
+        model=resolved_model,
+        temperature=0.7,
+        max_tokens=cap,
+    )
     return create_react_agent(llm, COACH_TOOLS)
 
 
