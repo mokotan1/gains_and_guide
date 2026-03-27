@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_vibrate/flutter_vibrate.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../../core/data/exercise_name_ko.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/workout_provider.dart';
@@ -250,28 +251,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       '유산소': {'런닝머신', '실내 사이클', '스텝밀(천국의 계단)'},
     };
 
-    // 카탈로그 데이터를 분석하여 해당 부위에 추가
     for (var row in catalog) {
-      final name = row['name']?.toString() ?? 'Unknown';
+      final englishName = row['name']?.toString() ?? 'Unknown';
+      final koName = ExerciseNameKo.get(englishName);
       final muscles = (row['primary_muscles']?.toString() ?? '').toLowerCase();
       final category = (row['category']?.toString() ?? '').toLowerCase();
 
       if (category.contains('cardio')) {
-        rawExerciseData['유산소']!.add(name);
+        rawExerciseData['유산소']!.add(koName);
         continue;
       }
 
       bool matched = false;
-      if (muscles.contains('chest')) { rawExerciseData['가슴']!.add(name); matched = true; }
-      if (muscles.contains('lats') || muscles.contains('middle back') || muscles.contains('lower back') || muscles.contains('back')) { rawExerciseData['등']!.add(name); matched = true; }
-      if (muscles.contains('quadriceps') || muscles.contains('hamstrings') || muscles.contains('glutes') || muscles.contains('calves') || muscles.contains('legs')) { rawExerciseData['하체']!.add(name); matched = true; }
-      if (muscles.contains('shoulders') || muscles.contains('delts')) { rawExerciseData['어깨']!.add(name); matched = true; }
-      if (muscles.contains('biceps') || muscles.contains('triceps') || muscles.contains('forearms') || muscles.contains('arms')) { rawExerciseData['팔']!.add(name); matched = true; }
-      if (muscles.contains('abs') || muscles.contains('core')) { rawExerciseData['복근']!.add(name); matched = true; }
+      if (muscles.contains('chest')) { rawExerciseData['가슴']!.add(koName); matched = true; }
+      if (muscles.contains('lats') || muscles.contains('middle back') || muscles.contains('lower back') || muscles.contains('back')) { rawExerciseData['등']!.add(koName); matched = true; }
+      if (muscles.contains('quadriceps') || muscles.contains('hamstrings') || muscles.contains('glutes') || muscles.contains('calves') || muscles.contains('legs')) { rawExerciseData['하체']!.add(koName); matched = true; }
+      if (muscles.contains('shoulders') || muscles.contains('delts')) { rawExerciseData['어깨']!.add(koName); matched = true; }
+      if (muscles.contains('biceps') || muscles.contains('triceps') || muscles.contains('forearms') || muscles.contains('arms')) { rawExerciseData['팔']!.add(koName); matched = true; }
+      if (muscles.contains('abs') || muscles.contains('core')) { rawExerciseData['복근']!.add(koName); matched = true; }
 
-      // 해당하는 부위가 없으면 '기타' 카테고리로 분류
       if (!matched) {
-        rawExerciseData['기타']!.add(name);
+        rawExerciseData['기타']!.add(koName);
       }
     }
 

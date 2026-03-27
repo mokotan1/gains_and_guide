@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/data/exercise_name_ko.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/workout_provider.dart';
@@ -88,20 +89,21 @@ class _RoutineCreateScreenState extends ConsumerState<RoutineCreateScreen> {
     };
 
     for (var row in catalog) {
-      final name = row['name']?.toString() ?? 'Unknown';
+      final englishName = row['name']?.toString() ?? 'Unknown';
+      final koName = ExerciseNameKo.get(englishName);
       final muscles = (row['primary_muscles']?.toString() ?? '').toLowerCase();
       final category = (row['category']?.toString() ?? '').toLowerCase();
 
-      if (category.contains('cardio')) { rawData['유산소']!.add(name); continue; }
+      if (category.contains('cardio')) { rawData['유산소']!.add(koName); continue; }
 
       bool matched = false;
-      if (muscles.contains('chest')) { rawData['가슴']!.add(name); matched = true; }
-      if (muscles.contains('lats') || muscles.contains('back')) { rawData['등']!.add(name); matched = true; }
-      if (muscles.contains('quadriceps') || muscles.contains('hamstrings') || muscles.contains('glutes') || muscles.contains('calves')) { rawData['하체']!.add(name); matched = true; }
-      if (muscles.contains('shoulders') || muscles.contains('delts')) { rawData['어깨']!.add(name); matched = true; }
-      if (muscles.contains('biceps') || muscles.contains('triceps') || muscles.contains('forearms')) { rawData['팔']!.add(name); matched = true; }
-      if (muscles.contains('abs') || muscles.contains('core')) { rawData['복근']!.add(name); matched = true; }
-      if (!matched) { rawData['기타']!.add(name); }
+      if (muscles.contains('chest')) { rawData['가슴']!.add(koName); matched = true; }
+      if (muscles.contains('lats') || muscles.contains('back')) { rawData['등']!.add(koName); matched = true; }
+      if (muscles.contains('quadriceps') || muscles.contains('hamstrings') || muscles.contains('glutes') || muscles.contains('calves')) { rawData['하체']!.add(koName); matched = true; }
+      if (muscles.contains('shoulders') || muscles.contains('delts')) { rawData['어깨']!.add(koName); matched = true; }
+      if (muscles.contains('biceps') || muscles.contains('triceps') || muscles.contains('forearms')) { rawData['팔']!.add(koName); matched = true; }
+      if (muscles.contains('abs') || muscles.contains('core')) { rawData['복근']!.add(koName); matched = true; }
+      if (!matched) { rawData['기타']!.add(koName); }
     }
 
     final Map<String, List<String>> exerciseData = {};
