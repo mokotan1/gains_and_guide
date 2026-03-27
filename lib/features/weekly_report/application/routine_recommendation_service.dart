@@ -1,8 +1,7 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
-
+import '../../../core/auth/user_identity.dart';
 import '../../../core/domain/repositories/exercise_catalog_repository.dart';
+import '../../../core/error/app_exception.dart';
+import '../../../core/network/api_client.dart';
 import '../domain/models/recommended_routine.dart';
 import '../domain/models/report_section.dart';
 import '../domain/models/weekly_report.dart';
@@ -16,48 +15,43 @@ import '../domain/models/weekly_report.dart';
 /// 4) 운동명을 카탈로그 기준으로 정규화
 class RoutineRecommendationService {
   final ExerciseCatalogRepository _catalogRepo;
-  final String _baseUrl;
+  final ApiClient _apiClient;
+  final UserIdentity _userIdentity;
 
   static const Duration _timeout = Duration(seconds: 45);
 
   RoutineRecommendationService(
     this._catalogRepo, {
-    String baseUrl = 'https://gains-and-guide-1.onrender.com',
-  }) : _baseUrl = baseUrl;
+    required ApiClient apiClient,
+    required UserIdentity userIdentity,
+  })  : _apiClient = apiClient,
+        _userIdentity = userIdentity;
 
   /// [report] 의 메트릭스·경고·액션아이템을 분석하여 추천 루틴을 반환한다.
   ///
-  /// AI 서버 호출 실패 또는 파싱 실패 시 null 반환 (graceful degradation).
+  /// [AppException] 발생 시 호출자에게 전파하여 UI 에서 적절히 처리하도록 한다.
+  /// 파싱 실패(routine key 부재 등)는 null 반환 (graceful degradation).
   Future<RecommendedRoutine?> recommend(WeeklyReport report) async {
-    try {
-      final payload = _buildPayload(report);
+    final payload = _buildPayload(report);
 
-      final response = await http
-          .post(
-            Uri.parse('$_baseUrl/recommend'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'user_id': 'master_user',
-              'weekly_summary': payload,
-            }),
-          )
-          .timeout(_timeout);
+    final data = await _apiClient.post(
+      '/recommend',
+      {
+        'user_id': _userIdentity.userId,
+        'weekly_summary': payload,
+      },
+      timeout: _timeout,
+    );
 
-      if (response.statusCode != 200) return null;
+    final routineJson = data['routine'] as Map<String, dynamic>?;
+    if (routineJson == null) return null;
 
-      final data = jsonDecode(utf8.decode(response.bodyBytes));
-      final routineJson = data['routine'] as Map<String, dynamic>?;
-      if (routineJson == null) return null;
+    final raw = RecommendedRoutine.fromJson({
+      ...routineJson,
+      'generatedAt': DateTime.now().toIso8601String(),
+    });
 
-      final raw = RecommendedRoutine.fromJson({
-        ...routineJson,
-        'generatedAt': DateTime.now().toIso8601String(),
-      });
-
-      return await _normalizeExerciseNames(raw);
-    } catch (_) {
-      return null;
-    }
+    return _normalizeExerciseNames(raw);
   }
 
   /// [WeeklyReport] 를 AI가 소화할 수 있는 구조화된 텍스트로 변환한다.

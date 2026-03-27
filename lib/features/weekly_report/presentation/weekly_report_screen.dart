@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/error/app_exception.dart';
 import '../../../core/workout_provider.dart';
 import '../../routine/domain/exercise.dart';
 import '../application/weekly_report_service.dart';
@@ -47,7 +48,13 @@ class _WeeklyReportScreenState extends ConsumerState<WeeklyReportScreen> {
         _report = report;
         _loading = false;
       });
-    } catch (e) {
+    } on AppException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.userMessage;
+        _loading = false;
+      });
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _error = '레포트 생성 중 오류가 발생했습니다.';
@@ -64,6 +71,12 @@ class _WeeklyReportScreenState extends ConsumerState<WeeklyReportScreen> {
       if (!mounted) return;
       setState(() {
         _report = report;
+        _loading = false;
+      });
+    } on AppException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.userMessage;
         _loading = false;
       });
     } catch (_) {
@@ -86,6 +99,12 @@ class _WeeklyReportScreenState extends ConsumerState<WeeklyReportScreen> {
         _report = enriched;
         _aiLoading = false;
       });
+    } on AppException catch (e) {
+      if (!mounted) return;
+      setState(() => _aiLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.userMessage)),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _aiLoading = false);
@@ -112,6 +131,12 @@ class _WeeklyReportScreenState extends ConsumerState<WeeklyReportScreen> {
           const SnackBar(content: Text('루틴 추천에 실패했습니다. 다시 시도해 주세요.')),
         );
       }
+    } on AppException catch (e) {
+      if (!mounted) return;
+      setState(() => _routineLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.userMessage)),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _routineLoading = false);

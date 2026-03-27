@@ -1,12 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_vibrate/flutter_vibrate.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/data/exercise_name_ko.dart';
+import '../../../core/error/app_exception.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/workout_provider.dart';
@@ -163,50 +163,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _processAiRecommendation(List<Exercise> currentExercises) async {
     _showLoadingDialog();
     try {
-      // 1. 오늘의 기록 저장
       await ref.read(workoutProvider.notifier).saveCurrentWorkoutToHistory();
       await _exportHistoryToCsv();
 
-      // 2. 프로필 및 데이터 준비
       final profileRepo = ref.read(bodyProfileRepositoryProvider);
       final profile = await profileRepo.getProfile();
       String pInfo = profile != null ? "사용자 체중: ${profile['weight']}kg. " : "";
       String fullCsv = await _generateWorkoutCsv(currentExercises);
 
-      // 3. AI 서버 요청
-      final response = await http.post(
-        Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'user_id': 'master_user',
+      final ApiClient apiClient = ref.read(apiClientProvider);
+      final identity = ref.read(userIdentityProvider);
+
+      final data = await apiClient.post(
+        '/chat',
+        {
+          'user_id': identity.userId,
           'message': '$pInfo 오늘 운동 기록을 분석하고 증량 가이드 데이터를 포함해서 줘.',
           'context': fullCsv,
-        }),
-      ).timeout(const Duration(seconds: 60));
+        },
+        timeout: const Duration(seconds: 60),
+      );
 
       if (!mounted) return;
-      Navigator.pop(context); // 로딩창 닫기
+      Navigator.pop(context);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (data['progression'] != null) {
+        await ref.read(workoutProvider.notifier).applyProgression(data['progression']);
+      }
 
-        // AI가 제안한 증량 데이터를 실제 주간 루틴에 자동 반영
-        if (data['progression'] != null) {
-          await ref.read(workoutProvider.notifier).applyProgression(data['progression']);
-        }
-
-        ref.read(workoutProvider.notifier).finishWorkout();
-        _showAiResultDialog(data['response']);
-      } else {
+      ref.read(workoutProvider.notifier).finishWorkout();
+      _showAiResultDialog(data['response']);
+    } on AppException catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('서버 오류: ${response.statusCode}'))
+          SnackBar(content: Text(e.userMessage), backgroundColor: Colors.red),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('정산 중 오류가 발생했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('정산 중 오류가 발생했습니다. 다시 시도해 주세요.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

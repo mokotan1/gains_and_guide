@@ -1,11 +1,12 @@
-import 'dart:convert';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 
+import '../../../core/auth/user_identity.dart';
 import '../../../core/constants/report_constants.dart';
 import '../../../core/domain/repositories/exercise_catalog_repository.dart';
 import '../../../core/domain/repositories/workout_history_repository.dart';
+import '../../../core/error/app_exception.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../domain/models/weekly_metrics.dart';
 import '../domain/models/weekly_report.dart';
@@ -23,13 +24,18 @@ class WeeklyReportService {
   final ExerciseCatalogRepository _catalogRepo;
   final WeeklyReportRepository _reportRepo;
   final RoutineRecommendationService _routineRecommendationService;
+  final ApiClient _apiClient;
+  final UserIdentity _userIdentity;
 
   WeeklyReportService(
     this._historyRepo,
     this._catalogRepo,
     this._reportRepo,
-    this._routineRecommendationService,
-  );
+    this._routineRecommendationService, {
+    required ApiClient apiClient,
+    required UserIdentity userIdentity,
+  })  : _apiClient = apiClient,
+        _userIdentity = userIdentity;
 
   /// 지정 주의 레포트를 생성(또는 캐시에서 반환)한다.
   ///
@@ -58,40 +64,35 @@ class WeeklyReportService {
   }
 
   /// AI 서버에 메트릭스 요약을 보내 자연어 코멘트를 받아 병합한다.
-  Future<WeeklyReport> enrichWithAi(
-    WeeklyReport report, {
-    String? userId,
-  }) async {
+  ///
+  /// AI 보강은 부가 기능이므로, 실패 시 원본 report 를 반환한다 (graceful degradation).
+  /// 단, 로그에는 에러 유형을 기록한다.
+  Future<WeeklyReport> enrichWithAi(WeeklyReport report) async {
     try {
       final summary = _buildAiSummaryPayload(report.metrics);
 
-      final response = await http.post(
-        Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'user_id': userId ?? 'master_user',
-          'message': '주간 운동 레포트 데이터를 분석해서 '
-              '한국어로 코치 입장에서 한 줄 요약과 핵심 조언을 해줘.',
-          'context': summary,
-        }),
-      ).timeout(const Duration(seconds: 30));
+      final data = await _apiClient.post('/chat', {
+        'user_id': _userIdentity.userId,
+        'message': '주간 운동 레포트 데이터를 분석해서 '
+            '한국어로 코치 입장에서 한 줄 요약과 핵심 조언을 해줘.',
+        'context': summary,
+      });
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
-        final aiComment = data['response'] as String?;
-        if (aiComment != null && aiComment.isNotEmpty) {
-          final enriched = report.copyWith(aiComment: aiComment);
-          await _reportRepo.saveReport(enriched);
-          return enriched;
-        }
+      final aiComment = data['response'] as String?;
+      if (aiComment != null && aiComment.isNotEmpty) {
+        final enriched = report.copyWith(aiComment: aiComment);
+        await _reportRepo.saveReport(enriched);
+        return enriched;
       }
-    } catch (_) {
-      // AI 보강 실패 시 원본 반환 (graceful degradation)
+    } on AppException catch (e) {
+      debugPrint('AI enrichment failed: $e');
     }
     return report;
   }
 
   /// 주간 분석 데이터를 기반으로 AI에게 다음 주 루틴 추천을 요청하여 병합한다.
+  ///
+  /// AI 보강은 부가 기능이므로, 실패 시 원본 report 를 반환한다 (graceful degradation).
   Future<WeeklyReport> enrichWithRoutineRecommendation(
     WeeklyReport report,
   ) async {
@@ -102,8 +103,8 @@ class WeeklyReportService {
         await _reportRepo.saveReport(enriched);
         return enriched;
       }
-    } catch (_) {
-      // 루틴 추천 실패 시 원본 반환 (graceful degradation)
+    } on AppException catch (e) {
+      debugPrint('Routine recommendation failed: $e');
     }
     return report;
   }
@@ -215,6 +216,8 @@ final routineRecommendationServiceProvider =
     Provider<RoutineRecommendationService>((ref) {
   return RoutineRecommendationService(
     ref.watch(exerciseCatalogRepositoryProvider),
+    apiClient: ref.watch(apiClientProvider),
+    userIdentity: ref.watch(userIdentityProvider),
   );
 });
 
@@ -224,5 +227,7 @@ final weeklyReportServiceProvider = Provider<WeeklyReportService>((ref) {
     ref.watch(exerciseCatalogRepositoryProvider),
     ref.watch(weeklyReportRepositoryProvider),
     ref.watch(routineRecommendationServiceProvider),
+    apiClient: ref.watch(apiClientProvider),
+    userIdentity: ref.watch(userIdentityProvider),
   );
 });

@@ -1,6 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/anonymous_user_identity.dart';
+import '../auth/user_identity.dart';
+import '../config/app_config.dart';
 import '../database/database_helper.dart';
+import '../network/api_client.dart';
 import '../data/body_profile_repository_impl.dart';
 import '../data/cardio_catalog_repository_impl.dart';
 import '../data/deload_repository_impl.dart';
@@ -19,6 +23,20 @@ import '../domain/repositories/user_profile_repository.dart';
 import '../domain/repositories/workout_history_repository.dart';
 import '../../features/weekly_report/data/weekly_report_repository_impl.dart';
 import '../../features/weekly_report/domain/repositories/weekly_report_repository.dart';
+
+final appConfigProvider = Provider<AppConfig>(
+  (_) => AppConfig.fromEnvironment(),
+);
+
+final userIdentityProvider = Provider<UserIdentity>(
+  (_) => const AnonymousUserIdentity(),
+);
+
+final apiClientProvider = Provider<ApiClient>((ref) {
+  final client = ApiClient(ref.watch(appConfigProvider));
+  ref.onDispose(client.dispose);
+  return client;
+});
 
 final _dbProvider = Provider<DatabaseHelper>((_) => DatabaseHelper.instance);
 
