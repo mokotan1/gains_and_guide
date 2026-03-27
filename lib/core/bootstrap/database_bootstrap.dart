@@ -46,7 +46,11 @@ class DatabaseBootstrap {
       'category': _stringFrom(e['category']),
       'equipment': _stringOrListJoin(e['equipment']),
       'primary_muscles': _stringOrListJoin(e['primary_muscles']),
+      'secondary_muscles': _stringOrListJoin(e['secondary_muscles']),
       'instructions': _stringOrListJoin(e['instructions'], sep: '\n'),
+      'level': _stringFrom(e['level']),
+      'force_type': _stringFrom(e['force']),
+      'mechanic': _stringFrom(e['mechanic']),
     };
   }
 

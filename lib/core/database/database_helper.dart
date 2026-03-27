@@ -17,7 +17,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 8,
+      version: 9,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -125,7 +125,11 @@ class DatabaseHelper {
         category TEXT,
         equipment TEXT,
         primary_muscles TEXT,
-        instructions TEXT
+        secondary_muscles TEXT,
+        instructions TEXT,
+        level TEXT,
+        force_type TEXT,
+        mechanic TEXT
       )
     ''');
   }
@@ -165,6 +169,17 @@ class DatabaseHelper {
     }
     if (oldVersion < 8) {
       await _createWeeklyReportsTable(db);
+    }
+    if (oldVersion < 9) {
+      await db.execute(
+          'ALTER TABLE exercise_catalog ADD COLUMN secondary_muscles TEXT');
+      await db.execute(
+          'ALTER TABLE exercise_catalog ADD COLUMN level TEXT');
+      await db.execute(
+          'ALTER TABLE exercise_catalog ADD COLUMN force_type TEXT');
+      await db.execute(
+          'ALTER TABLE exercise_catalog ADD COLUMN mechanic TEXT');
+      await db.execute('DELETE FROM exercise_catalog');
     }
   }
 
