@@ -36,4 +36,8 @@ class DeloadRepositoryImpl implements DeloadRepository {
 
   @override
   Future<void> decrementDeloadSession() => _db.decrementDeloadSession();
+
+  @override
+  Future<Map<String, dynamic>?> getActiveDeloadRecord() =>
+      _db.getActiveDeloadRecord();
 }

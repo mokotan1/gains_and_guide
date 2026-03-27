@@ -10,4 +10,7 @@ abstract class DeloadRepository {
   });
   Future<bool> isCurrentlyInDeload();
   Future<void> decrementDeloadSession();
+
+  /// remaining_sessions > 0인 활성 디로드 레코드 반환 (없으면 null)
+  Future<Map<String, dynamic>?> getActiveDeloadRecord();
 }
