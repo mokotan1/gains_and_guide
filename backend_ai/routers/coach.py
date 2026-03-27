@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from groq import APIStatusError, Groq
+from groq import APIError, APIStatusError, Groq
 from pydantic import BaseModel, ValidationError
 
 import catalog
@@ -92,19 +92,27 @@ def _truncate_coach_long_field(
     return text[: max(1, cap - 22)].rstrip() + "\n...[truncated]"
 
 
+def _groq_body_rate_limit_exceeded(body: object) -> bool:
+    if not isinstance(body, dict):
+        return False
+    err = body.get("error")
+    return isinstance(err, dict) and err.get("code") == "rate_limit_exceeded"
+
+
 def _is_groq_tpm_rate_limit(exc: BaseException) -> bool:
     if isinstance(exc, APIStatusError):
         if exc.status_code == 429:
             return True
         if exc.status_code == 413:
-            body = getattr(exc, "body", None)
-            if isinstance(body, dict):
-                err = body.get("error")
-                if isinstance(err, dict) and err.get("code") == "rate_limit_exceeded":
-                    return True
+            if _groq_body_rate_limit_exceeded(getattr(exc, "body", None)):
+                return True
             low = str(exc).lower()
             if "rate_limit" in low or "tokens per minute" in low:
                 return True
+    if isinstance(exc, APIError) and _groq_body_rate_limit_exceeded(
+        getattr(exc, "body", None)
+    ):
+        return True
     msg = str(exc).lower()
     if "rate_limit_exceeded" in msg or "tokens per minute" in msg:
         return True
@@ -133,7 +141,7 @@ def _invoke_legacy_chat_resolving_tpm(
     system_prompt, user_content = get_prompts(False)
     try:
         return _legacy_chat_completion(client, system_prompt, user_content)
-    except APIStatusError as e:
+    except APIError as e:
         if not _is_groq_tpm_rate_limit(e):
             raise
         logger.warning("Groq TPM/rate limit — compact prompt retry (legacy chat)")
@@ -162,6 +170,46 @@ def _chat_user_content(
     return f"[과거 운동 기록]\n{ctx}\n\n[질문]\n{message}"
 
 
+def _rag_reference_appendix(
+    query: str,
+    user_subject: str,
+    *,
+    rag_snippet_max: int | None = None,
+) -> str:
+    """Pinecone·임베딩 오류 시 전체 /chat 이 500이 되지 않도록 참조 블록만 생략한다."""
+    if not app_deps.rag:
+        return ""
+    try:
+        cfg = hybrid_rag_config_from_env()
+        user_ns = user_vector_namespace(user_subject)
+        corp_ns = _corpus_namespace()
+        corpus_chunks, user_chunks = retrieve_corpus_and_user(
+            app_deps.rag,
+            query,
+            user_namespace=user_ns,
+            cfg=cfg,
+            corpus_namespace=corp_ns,
+        )
+        parts: list[str] = []
+        if corpus_chunks:
+            parts.append(
+                "\n\n[References — 코퍼스 RAG]\n"
+                + format_references(corpus_chunks, max_snippet_chars=rag_snippet_max)
+            )
+        if user_chunks:
+            parts.append(
+                "\n\n[References — 내 메모리]\n"
+                + format_references(user_chunks, max_snippet_chars=rag_snippet_max)
+            )
+        return "".join(parts)
+    except Exception:
+        logger.exception(
+            "RAG retrieve failed (query_len=%s); continuing without references",
+            len(query),
+        )
+        return ""
+
+
 def _build_chat_system_base(
     user_message: str,
     user_subject: str,
@@ -174,25 +222,9 @@ def _build_chat_system_base(
         app_deps.assets.system_prompt, app_deps.assets.routine_guide_text
     )
     s = prompts.append_catalog(s, catalog.exercise_catalog_text)
-    if app_deps.rag:
-        cfg = hybrid_rag_config_from_env()
-        user_ns = user_vector_namespace(user_subject)
-        corp_ns = _corpus_namespace()
-        corpus_chunks, user_chunks = retrieve_corpus_and_user(
-            app_deps.rag,
-            user_message,
-            user_namespace=user_ns,
-            cfg=cfg,
-            corpus_namespace=corp_ns,
-        )
-        if corpus_chunks:
-            s += "\n\n[References — 코퍼스 RAG]\n" + format_references(
-                corpus_chunks, max_snippet_chars=rag_snippet_max
-            )
-        if user_chunks:
-            s += "\n\n[References — 내 메모리]\n" + format_references(
-                user_chunks, max_snippet_chars=rag_snippet_max
-            )
+    s += _rag_reference_appendix(
+        user_message, user_subject, rag_snippet_max=rag_snippet_max
+    )
     return s
 
 
@@ -208,25 +240,9 @@ def _build_recommend_system_base(
         app_deps.assets.routine_system_prompt, app_deps.assets.routine_guide_text
     )
     s = prompts.append_catalog(s, catalog.exercise_catalog_text)
-    if app_deps.rag:
-        cfg = hybrid_rag_config_from_env()
-        user_ns = user_vector_namespace(user_subject)
-        corp_ns = _corpus_namespace()
-        corpus_chunks, user_chunks = retrieve_corpus_and_user(
-            app_deps.rag,
-            weekly_summary,
-            user_namespace=user_ns,
-            cfg=cfg,
-            corpus_namespace=corp_ns,
-        )
-        if corpus_chunks:
-            s += "\n\n[References — 코퍼스 RAG]\n" + format_references(
-                corpus_chunks, max_snippet_chars=rag_snippet_max
-            )
-        if user_chunks:
-            s += "\n\n[References — 내 메모리]\n" + format_references(
-                user_chunks, max_snippet_chars=rag_snippet_max
-            )
+    s += _rag_reference_appendix(
+        weekly_summary, user_subject, rag_snippet_max=rag_snippet_max
+    )
     return s
 
 
@@ -426,7 +442,7 @@ async def recommend_routine(request: Request, body: RecommendRequest) -> dict[st
                 asyncio.to_thread(_groq_call),
                 timeout=_coach_timeout_sec(),
             )
-        except APIStatusError as e:
+        except APIError as e:
             if not _is_groq_tpm_rate_limit(e):
                 raise
             logger.warning("recommend: Groq TPM/rate limit — compact prompt retry")
