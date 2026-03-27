@@ -143,7 +143,7 @@ def create_rag_service(base_dir: str) -> RagService:
     """
     환경 변수로 백엔드 선택.
     - RAG_BACKEND=auto|token|local|pinecone (기본 auto)
-    - auto: Pinecone 키+인덱스명 있으면 pinecone, 아니면 RAG_VECTOR_INDEX_PATH 파일+OPENAI면 local, 아니면 token
+    - auto: Pinecone 키+인덱스명+임베딩 자격 있으면 pinecone, 아니면 벡터 파일+임베딩 자격이면 local, 아니면 token
     - local: corpus/vector_index.json 또는 RAG_VECTOR_INDEX_PATH
     """
     base = Path(base_dir)
@@ -151,7 +151,8 @@ def create_rag_service(base_dir: str) -> RagService:
     chunks = load_chunks_jsonl(chunks_path)
 
     mode_env = os.getenv("RAG_BACKEND", "auto").strip().lower()
-    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    from services.embedder_factory import embedding_credentials_ready
+
     pinecone_key = os.getenv("PINECONE_API_KEY", "").strip()
     index_name = os.getenv("PINECONE_INDEX_NAME", "").strip()
     vector_index_env = os.getenv("RAG_VECTOR_INDEX_PATH", "").strip()
@@ -174,17 +175,22 @@ def create_rag_service(base_dir: str) -> RagService:
         )
 
     if mode_env == "pinecone" or (
-        mode_env == "auto" and pinecone_key and index_name and openai_key
+        mode_env == "auto"
+        and pinecone_key
+        and index_name
+        and embedding_credentials_ready()
     ):
-        if not openai_key:
-            return token_fallback("pinecone needs OPENAI_API_KEY for query embedding")
+        if not embedding_credentials_ready():
+            return token_fallback(
+                "pinecone needs OPENAI_API_KEY or HUGGINGFACE_API_TOKEN (see EMBEDDING_BACKEND)"
+            )
         if not pinecone_key or not index_name:
             return token_fallback("pinecone needs PINECONE_API_KEY and PINECONE_INDEX_NAME")
         try:
-            from services.embeddings import OpenAIEmbedder
+            from services.embedder_factory import build_embedder
             from services.vector_rag import PineconeRetriever
 
-            embedder = OpenAIEmbedder(api_key=openai_key)
+            embedder = build_embedder()
             pc_ns = os.getenv("PINECONE_NAMESPACE", "corpus").strip() or "corpus"
             retriever = PineconeRetriever(
                 embedder=embedder,
@@ -198,19 +204,21 @@ def create_rag_service(base_dir: str) -> RagService:
             return token_fallback("pinecone init failed")
 
     if mode_env == "local" or (
-        mode_env == "auto" and local_path.is_file() and openai_key
+        mode_env == "auto" and local_path.is_file() and embedding_credentials_ready()
     ):
-        if not openai_key:
-            return token_fallback("local vector index needs OPENAI_API_KEY")
+        if not embedding_credentials_ready():
+            return token_fallback(
+                "local vector index needs OPENAI_API_KEY or HUGGINGFACE_API_TOKEN"
+            )
         if not local_path.is_file():
             if mode_env == "local":
                 logger.error("RAG_BACKEND=local but index missing: %s", local_path)
             return token_fallback("no vector index file")
         try:
-            from services.embeddings import OpenAIEmbedder
+            from services.embedder_factory import build_embedder
             from services.vector_rag import LocalVectorRetriever
 
-            embedder = OpenAIEmbedder(api_key=openai_key)
+            embedder = build_embedder()
             retriever = LocalVectorRetriever(
                 index_path=local_path,
                 embedder=embedder,

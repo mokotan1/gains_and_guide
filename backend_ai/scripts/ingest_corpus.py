@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-청크 JSONL → OpenAI 임베딩 → 로컬 vector_index.json 또는 Pinecone upsert.
+청크 JSONL → 임베딩(EMBEDDING_BACKEND) → 로컬 vector_index.json 또는 Pinecone upsert.
 
 사전 준비:
-  - OPENAI_API_KEY
-  - Pinecone 사용 시: PINECONE_API_KEY, PINECONE_INDEX_NAME (차원=임베딩 차원과 일치하는 인덱스)
+  - EMBEDDING_BACKEND=openai + OPENAI_API_KEY (기본)
+  - 또는 EMBEDDING_BACKEND=huggingface + HUGGINGFACE_API_TOKEN (Pinecone 인덱스 차원=모델 차원)
+  - Pinecone 사용 시: PINECONE_API_KEY, PINECONE_INDEX_NAME
 
 예:
   python scripts/ingest_corpus.py --out corpus/vector_index.json
@@ -18,6 +19,8 @@ import json
 import os
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # 실행 시 backend_ai 루트를 path 에 넣음
 _ROOT = Path(__file__).resolve().parents[1]
@@ -67,14 +70,22 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        print("OPENAI_API_KEY is required", file=sys.stderr)
+    load_dotenv(_ROOT / ".env")
+
+    from services.embedder_factory import build_embedder, embedding_credentials_ready
+
+    if not embedding_credentials_ready():
+        print(
+            "Set OPENAI_API_KEY or HUGGINGFACE_API_TOKEN (and EMBEDDING_BACKEND if not openai)",
+            file=sys.stderr,
+        )
         return 2
 
-    from services.embeddings import OpenAIEmbedder
-
-    embedder = OpenAIEmbedder(api_key=api_key, batch_size=args.batch_size)
+    try:
+        embedder = build_embedder(batch_size=args.batch_size)
+    except (ValueError, RuntimeError) as e:
+        print(str(e), file=sys.stderr)
+        return 2
 
     if not args.chunks.is_file():
         print(f"chunks file not found: {args.chunks}", file=sys.stderr)

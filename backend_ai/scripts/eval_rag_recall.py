@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-골든 쿼리로 recall@k 측정. 로컬 vector_index.json + OpenAI 쿼리 임베딩 필요.
+골든 쿼리로 recall@k 측정. 로컬 vector_index.json + 임베딩 자격(OPENAI 또는 HF) 필요.
 
   python scripts/eval_rag_recall.py --index corpus/vector_index.json --k 5
 """
@@ -12,6 +12,8 @@ import json
 import os
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
@@ -33,9 +35,15 @@ def main() -> int:
     p.add_argument("--k", type=int, default=5)
     args = p.parse_args()
 
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        print("OPENAI_API_KEY required", file=sys.stderr)
+    load_dotenv(_ROOT / ".env")
+
+    from services.embedder_factory import build_embedder, embedding_credentials_ready
+
+    if not embedding_credentials_ready():
+        print(
+            "OPENAI_API_KEY or HUGGINGFACE_API_TOKEN required (see EMBEDDING_BACKEND)",
+            file=sys.stderr,
+        )
         return 2
     if not args.index.is_file():
         print(f"index not found: {args.index} (run scripts/ingest_corpus.py first)", file=sys.stderr)
@@ -48,10 +56,13 @@ def main() -> int:
         golden = json.load(f)
     cases = golden.get("cases", [])
 
-    from services.embeddings import OpenAIEmbedder
     from services.vector_rag import LocalVectorRetriever
 
-    embedder = OpenAIEmbedder(api_key=api_key)
+    try:
+        embedder = build_embedder()
+    except (ValueError, RuntimeError) as e:
+        print(str(e), file=sys.stderr)
+        return 2
     retriever = LocalVectorRetriever(
         index_path=args.index,
         embedder=embedder,

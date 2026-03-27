@@ -11,3 +11,6 @@ openai>=1.40.0
 pinecone-client>=5.0.0
 slowapi>=0.1.9
 PyJWT>=2.8.0
+cryptography>=42.0.0
+asyncpg>=0.29.0
+huggingface_hub>=0.20.0

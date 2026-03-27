@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from services.embeddings import OpenAIEmbedder
+from services.embedder_factory import BatchEmbedder, build_embedder
 from services.pinecone_batch import delete_namespace_all, upsert_vector_batches
 from services.user_namespace import user_vector_namespace
 
@@ -69,7 +69,7 @@ def _vector_id(subject: str, chunk: MemoryChunkIn, index: int) -> str:
 
 
 class UserMemoryService:
-    def __init__(self, embedder: OpenAIEmbedder, index: Any) -> None:
+    def __init__(self, embedder: BatchEmbedder, index: Any) -> None:
         self._embedder = embedder
         self._index = index
 
@@ -106,18 +106,21 @@ class UserMemoryService:
 def build_user_memory_service() -> Optional["UserMemoryService"]:
     if not memory_api_enabled():
         return None
-    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    from services.embedder_factory import embedding_credentials_ready
+
     pc_key = os.getenv("PINECONE_API_KEY", "").strip()
     index_name = os.getenv("PINECONE_INDEX_NAME", "").strip()
-    if not (openai_key and pc_key and index_name):
-        logger.warning("UserMemoryService disabled: missing OPENAI or Pinecone env")
+    if not (embedding_credentials_ready() and pc_key and index_name):
+        logger.warning(
+            "UserMemoryService disabled: missing embedding credentials or Pinecone env"
+        )
         return None
     try:
         from pinecone import Pinecone
 
         pc = Pinecone(api_key=pc_key)
         index = pc.Index(index_name)
-        embedder = OpenAIEmbedder(api_key=openai_key)
+        embedder = build_embedder()
         return UserMemoryService(embedder=embedder, index=index)
     except Exception as e:
         logger.exception("UserMemoryService init failed: %s", e)

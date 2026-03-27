@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from groq import Groq
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -47,7 +48,19 @@ else:
     app_deps.groq_client = None
     app_deps.coach_agent = None
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from services.database import close_db_pool, init_db_pool
+
+    await init_db_pool(app)
+    try:
+        yield
+    finally:
+        await close_db_pool(app)
+
+
+app = FastAPI(lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(coach_router)
@@ -56,7 +69,10 @@ app.include_router(memory_router)
 
 
 @app.get("/")
-def read_root() -> dict:
+def read_root(request: Request) -> dict:
+    from services.database import get_pool
+
+    pool = get_pool(request.app)
     return {
         "status": "online",
         "message": "Gains & Guide AI Coach Server is Running!",
@@ -65,6 +81,11 @@ def read_root() -> dict:
             "rag_mode": getattr(app_deps.rag, "mode", "token"),
             "agent": app_deps.coach_agent is not None,
             "auth_jwt": bool(os.getenv("AUTH_JWT_SECRET", "").strip()),
+            "supabase_jwt": bool(
+                os.getenv("SUPABASE_JWKS_URL", "").strip()
+                and os.getenv("SUPABASE_JWT_ISS", "").strip()
+            ),
+            "database": pool is not None,
             "memory_api": os.getenv("MEMORY_API_ENABLED", "1").strip().lower()
             in ("1", "true", "yes"),
         },
