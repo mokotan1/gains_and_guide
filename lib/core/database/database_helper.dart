@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 10,
+      version: 11,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -58,6 +58,7 @@ class DatabaseHelper {
     await _createRoutineTables(db);
     await _createDeloadHistoryTable(db);
     await _createWeeklyReportsTable(db);
+    await _createUserProfileTable(db);
   }
 
   Future _createWeeklyReportsTable(Database db) async {
@@ -149,6 +150,19 @@ class DatabaseHelper {
     ''');
   }
 
+  Future _createUserProfileTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_profile (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        goal TEXT NOT NULL,
+        level TEXT NOT NULL,
+        frequency TEXT NOT NULL,
+        equipment TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
   Future _createFavoriteExercisesTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS favorite_exercises (
@@ -211,7 +225,6 @@ class DatabaseHelper {
     if (oldVersion < 10) {
       await _createCardioCatalogTable(db);
       await _createFavoriteExercisesTable(db);
-      // 기존 exercise_catalog에서 cardio 항목을 cardio_catalog로 이동
       await db.execute('''
         INSERT INTO cardio_catalog (name, equipment, instructions, level)
         SELECT name, equipment, instructions, level
@@ -221,6 +234,9 @@ class DatabaseHelper {
       await db.execute('''
         DELETE FROM exercise_catalog WHERE LOWER(category) = 'cardio'
       ''');
+    }
+    if (oldVersion < 11) {
+      await _createUserProfileTable(db);
     }
   }
 
@@ -664,6 +680,32 @@ class DatabaseHelper {
       orderBy: 'week_start DESC',
       limit: limit,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // User profile (온보딩 설문)
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveUserProfile(Map<String, dynamic> profile) async {
+    final db = await instance.database;
+    await db.insert(
+      'user_profile',
+      profile,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, dynamic>?> getUserProfile() async {
+    final db = await instance.database;
+    final res = await db.query('user_profile', limit: 1);
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  Future<bool> hasUserProfile() async {
+    final db = await instance.database;
+    final count = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT COUNT(*) FROM user_profile'));
+    return (count ?? 0) > 0;
   }
 
   /// remaining_sessions > 0인 활성 디로드 레코드 반환 (없으면 null)
