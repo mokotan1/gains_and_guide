@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/data/exercise_name_ko.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../domain/models/recommended_routine.dart';
 
@@ -140,7 +141,7 @@ class _ExerciseTile extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              exercise.name,
+              ExerciseNameKo.get(ExerciseNameKo.reverse(exercise.name)),
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),

@@ -1,4 +1,5 @@
 import '../../../core/auth/user_identity.dart';
+import '../../../core/data/exercise_name_ko.dart';
 import '../../../core/domain/repositories/exercise_catalog_repository.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/network/api_client.dart';
@@ -142,10 +143,11 @@ class RoutineRecommendationService {
     final normalized = <RoutineExercise>[];
 
     for (final ex in raw.exercises) {
-      final results = await _catalogRepo.search(ex.name);
+      final catalogLookup = ExerciseNameKo.reverse(ex.name);
+      final results = await _catalogRepo.search(catalogLookup);
       if (results.isNotEmpty) {
         final match = results.firstWhere(
-          (r) => r.name.toLowerCase() == ex.name.toLowerCase(),
+          (r) => r.name.toLowerCase() == catalogLookup.toLowerCase(),
           orElse: () => results.first,
         );
         normalized.add(RoutineExercise(
