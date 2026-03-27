@@ -2,24 +2,29 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from groq import Groq
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 import catalog
 import prompts
-from graphs.coach_graph import run_coach_agent
+from graphs.coach_graph import COACH_SCHEMA_RETRY_USER_SUFFIX, run_coach_agent
+from rate_limits import coach_rate_limit_string, limiter
+from services.coach_response_schema import CoachChatResponse, coerce_raw_coach_dict
 from services.rag import format_references
 from state import app_deps
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_COACH_RATE_LIMIT = coach_rate_limit_string()
 
 
 class ChatRequest(BaseModel):
@@ -42,6 +47,23 @@ def _rag_top_k() -> int:
 
 def _use_legacy_chat() -> bool:
     return os.getenv("USE_LEGACY_CHAT", "").strip().lower() in ("1", "true", "yes")
+
+
+def _coach_timeout_sec() -> float:
+    try:
+        return float(os.getenv("COACH_REQUEST_TIMEOUT_SEC", "90"))
+    except ValueError:
+        return 90.0
+
+
+def _expose_internal_errors() -> bool:
+    return os.getenv("EXPOSE_INTERNAL_ERRORS", "").strip().lower() in ("1", "true", "yes")
+
+
+def _public_error_message(exc: BaseException) -> str:
+    if _expose_internal_errors():
+        return str(exc)
+    return "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
 
 def _build_chat_system_base(user_message: str) -> str:
@@ -106,62 +128,139 @@ def _legacy_chat_completion(
         return {"response": reply, "routine": None}
 
 
+def _coerce_chat_response(raw: dict[str, Any]) -> CoachChatResponse:
+    return coerce_raw_coach_dict(raw)
+
+
+async def _run_agent_with_timeout(
+    system_prompt: str, user_content: str, *, user_suffix: str = ""
+) -> dict[str, Any]:
+    if not app_deps.coach_agent:
+        raise RuntimeError("coach agent not configured")
+
+    def _call() -> dict[str, Any]:
+        return run_coach_agent(
+            app_deps.coach_agent,
+            system_block=system_prompt,
+            user_block=user_content,
+            user_suffix=user_suffix,
+        )
+
+    return await asyncio.wait_for(
+        asyncio.to_thread(_call),
+        timeout=_coach_timeout_sec(),
+    )
+
+
 @router.post("/chat")
-async def chat_with_coach(request: ChatRequest) -> dict[str, Any]:
+@limiter.limit(_COACH_RATE_LIMIT)
+async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]:
+    _ = request
     if not app_deps.groq_client or not app_deps.groq_api_key:
         raise HTTPException(status_code=500, detail="서버에 Groq API 키가 없습니다.")
 
-    system_prompt = _build_chat_system_base(request.message)
+    system_prompt = _build_chat_system_base(body.message)
     user_content = (
-        f"[과거 운동 기록]\n{request.context}\n\n[질문]\n{request.message}"
+        f"[과거 운동 기록]\n{body.context}\n\n[질문]\n{body.message}"
     )
 
     if _use_legacy_chat() or not app_deps.coach_agent:
         try:
-            return _legacy_chat_completion(
+            raw = _legacy_chat_completion(
                 app_deps.groq_client, system_prompt, user_content
             )
+            try:
+                v = _coerce_chat_response(raw)
+            except ValidationError:
+                v = CoachChatResponse(
+                    response=str(raw.get("response", "응답을 처리하지 못했습니다.")),
+                    routine=None,
+                )
+            return {
+                "response": v.response,
+                "routine": catalog.localize_routine_exercise_names(v.routine),
+            }
         except Exception as e:
             logger.exception("legacy chat failed")
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise HTTPException(
+                status_code=500, detail=_public_error_message(e)
+            ) from e
 
     try:
-        parsed = run_coach_agent(
-            app_deps.coach_agent,
-            system_block=system_prompt,
-            user_block=user_content,
-        )
-        text_response = (
-            parsed.get("response")
-            or parsed.get("message")
-            or "답변 내용을 찾을 수 없습니다."
-        )
+        parsed = await _run_agent_with_timeout(system_prompt, user_content)
+        try:
+            v = _coerce_chat_response(parsed)
+        except ValidationError:
+            logger.warning("agent output failed schema; retry once")
+            parsed2 = await _run_agent_with_timeout(
+                system_prompt,
+                user_content,
+                user_suffix=COACH_SCHEMA_RETRY_USER_SUFFIX,
+            )
+            try:
+                v = _coerce_chat_response(parsed2)
+            except ValidationError:
+                logger.warning("agent retry failed schema; falling back to legacy JSON")
+                raw = _legacy_chat_completion(
+                    app_deps.groq_client, system_prompt, user_content
+                )
+                try:
+                    v = _coerce_chat_response(raw)
+                except ValidationError:
+                    v = CoachChatResponse(
+                        response=str(
+                            parsed2.get("response", parsed.get("response", ""))
+                        )
+                        or "답변 형식을 확인하지 못했습니다.",
+                        routine=None,
+                    )
         return {
-            "response": text_response,
-            "routine": catalog.localize_routine_exercise_names(parsed.get("routine")),
+            "response": v.response,
+            "routine": catalog.localize_routine_exercise_names(v.routine),
         }
+    except asyncio.TimeoutError:
+        logger.error("coach agent timeout after %ss", _coach_timeout_sec())
+        raise HTTPException(
+            status_code=504,
+            detail="응답 생성이 시간 초과되었습니다. 짧은 질문으로 다시 시도해 주세요.",
+        ) from None
     except Exception as e:
         logger.exception("agent chat failed, falling back to legacy JSON chat")
         try:
-            return _legacy_chat_completion(
+            raw = _legacy_chat_completion(
                 app_deps.groq_client, system_prompt, user_content
             )
+            try:
+                v = _coerce_chat_response(raw)
+            except ValidationError:
+                v = CoachChatResponse(
+                    response=str(raw.get("response", "응답을 처리하지 못했습니다.")),
+                    routine=None,
+                )
+            return {
+                "response": v.response,
+                "routine": catalog.localize_routine_exercise_names(v.routine),
+            }
         except Exception:
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise HTTPException(
+                status_code=500, detail=_public_error_message(e)
+            ) from e
 
 
 @router.post("/recommend")
-async def recommend_routine(request: RecommendRequest) -> dict[str, Any]:
+@limiter.limit(_COACH_RATE_LIMIT)
+async def recommend_routine(request: Request, body: RecommendRequest) -> dict[str, Any]:
+    _ = request
     if not app_deps.groq_client:
         raise HTTPException(status_code=500, detail="서버에 Groq API 키가 없습니다.")
 
-    system_prompt = _build_recommend_system_base(request.weekly_summary)
+    system_prompt = _build_recommend_system_base(body.weekly_summary)
     messages = [
         {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": (
-                f"[주간 운동 분석 데이터]\n{request.weekly_summary}\n\n"
+                f"[주간 운동 분석 데이터]\n{body.weekly_summary}\n\n"
                 "[지시]\n위 분석 데이터를 바탕으로 다음 주 추천 루틴을 JSON으로 생성해주세요."
             ),
         },
@@ -169,12 +268,19 @@ async def recommend_routine(request: RecommendRequest) -> dict[str, Any]:
 
     reply: Optional[str] = None
     try:
-        chat_completion = app_deps.groq_client.chat.completions.create(
-            messages=messages,
-            model="llama-3.1-8b-instant",
-            temperature=0.7,
-            max_tokens=1024,
-            response_format={"type": "json_object"},
+
+        def _groq_call() -> Any:
+            return app_deps.groq_client.chat.completions.create(
+                messages=messages,
+                model="llama-3.1-8b-instant",
+                temperature=0.7,
+                max_tokens=1024,
+                response_format={"type": "json_object"},
+            )
+
+        chat_completion = await asyncio.wait_for(
+            asyncio.to_thread(_groq_call),
+            timeout=_coach_timeout_sec(),
         )
         reply = chat_completion.choices[0].message.content
         if not reply:
@@ -189,7 +295,17 @@ async def recommend_routine(request: RecommendRequest) -> dict[str, Any]:
                     "exercises": [],
                 }
             }
+        if not isinstance(routine, dict):
+            raise HTTPException(
+                status_code=500, detail="AI 루틴 형식이 올바르지 않습니다."
+            )
         return {"routine": catalog.localize_routine_exercise_names(routine)}
+    except asyncio.TimeoutError:
+        logger.error("recommend timeout after %ss", _coach_timeout_sec())
+        raise HTTPException(
+            status_code=504,
+            detail="루틴 생성이 시간 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+        ) from None
     except json.JSONDecodeError:
         logger.error("JSON 파싱 실패: %s", reply)
         raise HTTPException(status_code=500, detail="AI 응답 파싱에 실패했습니다.") from None
@@ -197,4 +313,4 @@ async def recommend_routine(request: RecommendRequest) -> dict[str, Any]:
         raise
     except Exception as e:
         logger.exception("루틴 추천 생성 중 오류")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_public_error_message(e)) from e

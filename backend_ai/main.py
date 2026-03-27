@@ -6,10 +6,13 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from groq import Groq
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 import catalog
 import prompts
 from graphs.coach_graph import build_coach_agent
+from rate_limits import limiter
 from routers.coach import router as coach_router
 from services.rag import create_rag_service
 from state import app_deps
@@ -43,6 +46,8 @@ else:
     app_deps.coach_agent = None
 
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(coach_router)
 
 
