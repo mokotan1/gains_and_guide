@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/data/exercise_name_ko.dart';
-import '../../../core/providers/repository_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/workout_provider.dart';
+import '../../exercise_search/presentation/exercise_search_bottom_sheet.dart';
 import '../data/routine_repository.dart';
 import '../domain/exercise.dart';
 import '../domain/routine.dart';
@@ -73,149 +72,9 @@ class _RoutineCreateScreenState extends ConsumerState<RoutineCreateScreen> {
     }
   }
 
-  void _addExerciseDialog() async {
-    final catalogRepo = ref.read(exerciseCatalogRepositoryProvider);
-    final List<Map<String, dynamic>> catalog = await catalogRepo.getAll();
-
-    final Map<String, Set<String>> rawData = {
-      '가슴': {'플랫 벤치 프레스', '인클라인 벤치 프레스', '덤벨 프레스', '펙 덱 플라이', '푸쉬업', '케이블 크로스오버'},
-      '등': {'컨벤셔널 데드리프트', '루마니안 데드리프트', '펜들레이 로우', '바벨 로우', '랫 풀다운', '풀업', '시티드 로우'},
-      '하체': {'백 스쿼트', '프론트 스쿼트', '레그 프레스', '레그 익스텐션', '레그 컬', '런지', '카프 레이즈'},
-      '어깨': {'오버헤드 프레스 (OHP)', '덤벨 숄더 프레스', '사이드 레터럴 레이즈', '프론트 레이즈', '페이스 풀'},
-      '팔': {'바벨 컬', '덤벨 컬', '해머 컬', '트라이셉스 푸쉬다운', '오버헤드 트라이셉스 익스텐션'},
-      '복근': {'크런치', '레그 레이즈', '플랭크', '케이블 크런치'},
-      '유산소': {'런닝머신', '실내 사이클', '스텝밀(천국의 계단)'},
-      '기타': {},
-    };
-
-    for (var row in catalog) {
-      final englishName = row['name']?.toString() ?? 'Unknown';
-      final koName = ExerciseNameKo.get(englishName);
-      final muscles = (row['primary_muscles']?.toString() ?? '').toLowerCase();
-      final category = (row['category']?.toString() ?? '').toLowerCase();
-
-      if (category.contains('cardio')) { rawData['유산소']!.add(koName); continue; }
-
-      bool matched = false;
-      if (muscles.contains('chest')) { rawData['가슴']!.add(koName); matched = true; }
-      if (muscles.contains('lats') || muscles.contains('back')) { rawData['등']!.add(koName); matched = true; }
-      if (muscles.contains('quadriceps') || muscles.contains('hamstrings') || muscles.contains('glutes') || muscles.contains('calves')) { rawData['하체']!.add(koName); matched = true; }
-      if (muscles.contains('shoulders') || muscles.contains('delts')) { rawData['어깨']!.add(koName); matched = true; }
-      if (muscles.contains('biceps') || muscles.contains('triceps') || muscles.contains('forearms')) { rawData['팔']!.add(koName); matched = true; }
-      if (muscles.contains('abs') || muscles.contains('core')) { rawData['복근']!.add(koName); matched = true; }
-      if (!matched) { rawData['기타']!.add(koName); }
-    }
-
-    final Map<String, List<String>> exerciseData = {};
-    rawData.forEach((key, value) {
-      if (value.isNotEmpty) exerciseData[key] = value.toList()..sort();
-    });
-
-    if (!mounted) return;
-
-    String? selectedCategory;
-    String? selectedExercise;
-    double weight = 0.0;
-    int sets = 3;
-    int reps = 10;
-
-    final result = await showDialog<Exercise>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final bool isCardio = selectedCategory == '유산소';
-
-          Widget buildCounter(String label, String valueStr, VoidCallback onDec, VoidCallback onInc) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    IconButton(onPressed: onDec, icon: const Icon(Icons.remove_circle_outline, color: AppTheme.primaryBlue), constraints: const BoxConstraints(), padding: EdgeInsets.zero),
-                    const SizedBox(width: 12),
-                    Text(valueStr, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 12),
-                    IconButton(onPressed: onInc, icon: const Icon(Icons.add_circle_outline, color: AppTheme.primaryBlue), constraints: const BoxConstraints(), padding: EdgeInsets.zero),
-                  ],
-                ),
-              ],
-            );
-          }
-
-          return AlertDialog(
-            title: const Text('운동 추가'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  DropdownButtonFormField<String>(
-                    decoration: InputDecoration(labelText: '운동 부위', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-                    value: selectedCategory,
-                    items: exerciseData.keys.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                    onChanged: (v) => setDialogState(() {
-                      selectedCategory = v;
-                      selectedExercise = null;
-                      if (v == '유산소') { sets = 1; reps = 30; weight = 0.0; } else { sets = 3; reps = 10; }
-                    }),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    decoration: InputDecoration(labelText: '운동명', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-                    value: selectedExercise,
-                    isExpanded: true,
-                    items: selectedCategory == null ? [] : exerciseData[selectedCategory]!.map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis))).toList(),
-                    onChanged: (v) => setDialogState(() => selectedExercise = v),
-                    hint: const Text('부위를 먼저 선택하세요'),
-                  ),
-                  if (selectedExercise != null) ...[
-                    const SizedBox(height: 24),
-                    if (!isCardio)
-                      buildCounter('무게 (kg)', weight.toStringAsFixed(1),
-                        () => setDialogState(() => weight = (weight - 2.5).clamp(0.0, 500.0)),
-                        () => setDialogState(() => weight += 2.5)),
-                    if (!isCardio) const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        if (!isCardio)
-                          buildCounter('세트', '$sets',
-                            () => setDialogState(() => sets = (sets - 1).clamp(1, 20)),
-                            () => setDialogState(() => sets += 1)),
-                        buildCounter(isCardio ? '목표 시간 (분)' : '횟수', '$reps',
-                          () => setDialogState(() => reps = (reps - 1).clamp(1, 100)),
-                          () => setDialogState(() => reps += 1)),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-              ElevatedButton(
-                onPressed: selectedExercise == null ? null : () {
-                  Navigator.pop(context, Exercise.initial(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    name: selectedExercise!,
-                    sets: isCardio ? 1 : sets,
-                    reps: isCardio ? reps : reps,
-                    weight: weight,
-                    isCardio: isCardio,
-                  ));
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-                child: const Text('추가'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (result != null) {
+  void _addExercise() async {
+    final result = await ExerciseSearchBottomSheet.show(context);
+    if (result != null && mounted) {
       setState(() => _exercises.add(result));
     }
   }
@@ -310,7 +169,7 @@ class _RoutineCreateScreenState extends ConsumerState<RoutineCreateScreen> {
                       children: [
                         const Text('운동 목록', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         TextButton.icon(
-                          onPressed: _addExerciseDialog,
+                          onPressed: _addExercise,
                           icon: const Icon(Icons.add, size: 18),
                           label: const Text('추가'),
                         ),

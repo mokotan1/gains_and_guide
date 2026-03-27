@@ -2,13 +2,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_helper.dart';
 import '../data/body_profile_repository_impl.dart';
+import '../data/cardio_catalog_repository_impl.dart';
 import '../data/deload_repository_impl.dart';
 import '../data/exercise_catalog_repository_impl.dart';
+import '../data/favorite_exercise_repository_impl.dart';
 import '../data/progression_repository_impl.dart';
 import '../data/workout_history_repository_impl.dart';
 import '../domain/repositories/body_profile_repository.dart';
+import '../domain/repositories/cardio_catalog_repository.dart';
 import '../domain/repositories/deload_repository.dart';
 import '../domain/repositories/exercise_catalog_repository.dart';
+import '../domain/repositories/favorite_exercise_repository.dart';
 import '../domain/repositories/progression_repository.dart';
 import '../domain/repositories/workout_history_repository.dart';
 import '../../features/ai_coach/data/coaching_knowledge_repository_impl.dart';
@@ -49,4 +53,12 @@ final aiCoachServiceProvider = Provider<AiCoachService>((ref) {
 
 final weeklyReportRepositoryProvider = Provider<WeeklyReportRepository>((ref) {
   return WeeklyReportRepositoryImpl(ref.watch(_dbProvider));
+});
+
+final cardioCatalogRepositoryProvider = Provider<CardioCatalogRepository>((ref) {
+  return CardioCatalogRepositoryImpl(ref.watch(_dbProvider));
+});
+
+final favoriteExerciseRepositoryProvider = Provider<FavoriteExerciseRepository>((ref) {
+  return FavoriteExerciseRepositoryImpl(ref.watch(_dbProvider));
 });

@@ -55,6 +55,16 @@ class FakeExerciseCatalogRepository implements ExerciseCatalogRepository {
 
   @override
   Future<List<Map<String, dynamic>>> getAll() async => catalogRows;
+
+  @override
+  Future<List<ExerciseCatalog>> searchWithFilters({
+    String keyword = '',
+    List<String> muscleKeys = const [],
+    String? equipment,
+  }) async => [];
+
+  @override
+  Future<List<String>> getRecentExerciseNames({int limit = 5}) async => [];
 }
 
 class FakeWeeklyReportRepository implements WeeklyReportRepository {
