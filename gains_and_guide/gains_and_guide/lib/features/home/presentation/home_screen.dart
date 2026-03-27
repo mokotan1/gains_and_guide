@@ -144,7 +144,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       // 3. AI 서버 요청
       final response = await http.post(
-        Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
+        Uri.parse('http://15.134.24.132:8000/chat'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'user_id': 'master_user',

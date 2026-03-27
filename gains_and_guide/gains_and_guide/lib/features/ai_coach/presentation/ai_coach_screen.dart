@@ -33,7 +33,7 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
+        Uri.parse('http://15.134.24.132:8000/chat'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': 'master', 'message': userMsg, 'context': contextData}),
       ).timeout(const Duration(seconds: 45));
