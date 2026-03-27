@@ -19,7 +19,7 @@ class AppConfig {
   factory AppConfig.fromEnvironment() {
     const baseUrl = String.fromEnvironment(
       'API_BASE_URL',
-      defaultValue: 'https://gains-and-guide.onrender.com',
+      defaultValue: 'https://gains-and-guide-1.onrender.com',
     );
     const timeoutSeconds = int.fromEnvironment(
       'API_TIMEOUT_SECONDS',

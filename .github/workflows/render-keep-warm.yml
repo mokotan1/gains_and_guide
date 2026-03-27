@@ -1,7 +1,7 @@
 # Render 무료 티어 슬립 완화 + 생존 확인.
 #
 # Repository secrets (Settings → Secrets and variables → Actions):
-#   RENDER_API_BASE_URL  예: https://gains-and-guide.onrender.com  (끝 슬래시 없이)
+#   RENDER_API_BASE_URL  예: https://gains-and-guide-1.onrender.com  (끝 슬래시 없이)
 #
 name: Render keep-warm
 
