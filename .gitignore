@@ -45,6 +45,9 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Linux Flutter build ephemeral (plugin symlinks, generated files)
+linux/flutter/ephemeral/
+
 # Platform-specific generated files
 **/GeneratedPluginRegistrant.java
 **/GeneratedPluginRegistrant.h
