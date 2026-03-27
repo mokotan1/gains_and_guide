@@ -203,4 +203,103 @@ void main() {
       expect(allIds.length, 14);
     });
   });
+
+  group('Set CRUD (add / remove)', () {
+    Exercise _addSet(Exercise ex) {
+      final lastWeight = ex.setWeights.isNotEmpty ? ex.setWeights.last : ex.weight;
+      final lastReps = ex.setReps.isNotEmpty ? ex.setReps.last : ex.reps;
+      return ex.copyWith(
+        sets: ex.sets + 1,
+        setStatus: [...ex.setStatus, false],
+        setRpe: [...ex.setRpe, null],
+        setWeights: [...ex.setWeights, lastWeight],
+        setReps: [...ex.setReps, lastReps],
+        setFailed: [...ex.setFailed, false],
+      );
+    }
+
+    Exercise? _removeSet(Exercise ex, int sIdx) {
+      if (ex.sets <= 1) return null;
+      return ex.copyWith(
+        sets: ex.sets - 1,
+        setStatus: [...ex.setStatus]..removeAt(sIdx),
+        setRpe: [...ex.setRpe]..removeAt(sIdx),
+        setWeights: [...ex.setWeights]..removeAt(sIdx),
+        setReps: [...ex.setReps]..removeAt(sIdx),
+        setFailed: [...ex.setFailed]..removeAt(sIdx),
+      );
+    }
+
+    test('addSet increases sets by 1 and copies last weight/reps', () {
+      final ex = Exercise.initial(id: '1', name: '스쿼트', sets: 3, reps: 5, weight: 100);
+      final result = _addSet(ex);
+
+      expect(result.sets, 4);
+      expect(result.setWeights.length, 4);
+      expect(result.setReps.length, 4);
+      expect(result.setStatus.length, 4);
+      expect(result.setFailed.length, 4);
+      expect(result.setWeights.last, 100.0);
+      expect(result.setReps.last, 5);
+      expect(result.setStatus.last, false);
+      expect(result.setFailed.last, false);
+    });
+
+    test('addSet copies the last set weight even if modified', () {
+      var ex = Exercise.initial(id: '1', name: '벤치', sets: 2, reps: 5, weight: 80);
+      ex = ex.copyWith(setWeights: [80.0, 85.0]);
+      final result = _addSet(ex);
+
+      expect(result.sets, 3);
+      expect(result.setWeights, [80.0, 85.0, 85.0]);
+    });
+
+    test('removeSet decreases sets by 1 and removes correct index', () {
+      final ex = Exercise.initial(id: '1', name: '스쿼트', sets: 3, reps: 5, weight: 100);
+      final withCustomWeights = ex.copyWith(setWeights: [100.0, 105.0, 110.0]);
+      final result = _removeSet(withCustomWeights, 1)!;
+
+      expect(result.sets, 2);
+      expect(result.setWeights, [100.0, 110.0]);
+      expect(result.setReps.length, 2);
+      expect(result.setStatus.length, 2);
+    });
+
+    test('removeSet returns null when only 1 set remains', () {
+      final ex = Exercise.initial(id: '1', name: '데드', sets: 1, reps: 5, weight: 145);
+      final result = _removeSet(ex, 0);
+
+      expect(result, isNull);
+    });
+
+    test('removeSet preserves completed set data after deletion', () {
+      var ex = Exercise.initial(id: '1', name: '스쿼트', sets: 4, reps: 5, weight: 100);
+      ex = ex.copyWith(
+        setStatus: [true, true, false, false],
+        setRpe: [7, 8, null, null],
+        setFailed: [false, true, false, false],
+      );
+
+      final result = _removeSet(ex, 2)!;
+
+      expect(result.sets, 3);
+      expect(result.setStatus, [true, true, false]);
+      expect(result.setRpe, [7, 8, null]);
+      expect(result.setFailed, [false, true, false]);
+    });
+
+    test('removeSet first index shifts remaining data correctly', () {
+      var ex = Exercise.initial(id: '1', name: '벤치', sets: 3, reps: 5, weight: 80);
+      ex = ex.copyWith(
+        setWeights: [75.0, 80.0, 85.0],
+        setStatus: [true, false, false],
+      );
+
+      final result = _removeSet(ex, 0)!;
+
+      expect(result.sets, 2);
+      expect(result.setWeights, [80.0, 85.0]);
+      expect(result.setStatus, [false, false]);
+    });
+  });
 }

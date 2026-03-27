@@ -25,4 +25,15 @@ class WorkoutHistoryRepositoryImpl implements WorkoutHistoryRepository {
   @override
   Future<List<Map<String, dynamic>>> getRecentSessions(int sessionLimit) =>
       _db.getRecentSessions(sessionLimit);
+
+  @override
+  Future<List<Map<String, dynamic>>> getHistoryForDateRange(
+    String startDate,
+    String endDate,
+  ) =>
+      _db.getHistoryForDateRange(startDate, endDate);
+
+  @override
+  Future<List<double>> getWeeklyVolumes(int weekCount) =>
+      _db.getWeeklyVolumes(weekCount);
 }

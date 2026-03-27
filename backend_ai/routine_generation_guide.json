@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "locale": "ko",
+    "description": "프로필(목적·경력·빈도·장비) 기반 루틴 설계 시 참고하는 few-shot 및 원칙. JSON routine의 name은 반드시 Available Exercise Catalog와 동일한 영문명을 사용한다."
+  },
+  "design_principles": {
+    "strength_beginner_low_frequency": "주 3일 이하·초보·스트렝스: 전신을 주로 돌리는 A/B 교차 또는 단순 분할. 복합 위주, 세트 간 휴식 2~3분, RPE 중간(약 7~8).",
+    "hypertrophy_intermediate_high_frequency": "주 5일·중급·근비대: Push/Pull/Legs 등 부위 분할로 피로 분산. 프리웨이트 복합 후 머신·케이블로 고립. 휴식 60초~2분, 랩 8~15.",
+    "fat_loss_home_low_frequency": "주 2일·초보·체지방·홈(맨몸/덤벨): 전신 서킷 또는 짧은 휴식의 순환. 대사 스트레스를 위해 휴식을 짧게 유지.",
+    "catalog_rule": "아래 예시의 name 필드는 이미 카탈로그에 맞춘 참고용이다. 새 루틴을 짤 때도 카탈로그에 있는 운동만 선택하고, 한글 통칭은 response 텍스트에만 사용한다."
+  },
+  "few_shot_examples": [
+    {
+      "user_profile": {
+        "목적": "스트렝스 향상",
+        "경력": "초보자(1년 미만)",
+        "빈도": "주 3일",
+        "장비": "프리웨이트"
+      },
+      "rationale": "주 3회 전신을 A/B로 교차해 복합 위주 스트렝스 적응.",
+      "sessions": [
+        {
+          "label": "Workout A (예: 월/금)",
+          "exercises": [
+            { "name": "Barbell Full Squat", "sets": 3, "reps": 5, "rest_min": 3, "note": "RPE 약 7.5" },
+            { "name": "Barbell Bench Press - Medium Grip", "sets": 3, "reps": 5, "rest_min": 3, "note": "RPE 약 7.5" },
+            { "name": "Bent Over Barbell Row", "sets": 3, "reps": 8, "rest_min": 2 }
+          ]
+        },
+        {
+          "label": "Workout B (예: 수)",
+          "exercises": [
+            { "name": "Barbell Deadlift", "sets": 1, "reps": 5, "rest_min": 3, "note": "초보 피로 관리 시 1세트만 가능" },
+            { "name": "Barbell Shoulder Press", "sets": 3, "reps": 5, "rest_min": 3 },
+            { "name": "Wide-Grip Lat Pulldown", "sets": 3, "reps": 10, "rest_min": 2 }
+          ]
+        }
+      ],
+      "coaching_tip": "자세 안정화와 세트 간 충분한 휴식(복합은 3분 전후)이 스트렝스 적응에 중요하다."
+    },
+    {
+      "user_profile": {
+        "목적": "근육량 증가",
+        "경력": "중급자(2년)",
+        "빈도": "주 5일",
+        "장비": "프리웨이트+머신"
+      },
+      "rationale": "Push/Pull/Legs로 주당 부위를 2회 자극 가능. 프리웨이트 후 머신·케이블로 고립.",
+      "sessions": [
+        {
+          "label": "Day 1 Push",
+          "exercises": [
+            { "name": "Barbell Incline Bench Press - Medium Grip", "sets": 4, "reps": 10, "rest_min": 2 },
+            { "name": "Arnold Dumbbell Press", "sets": 4, "reps": 10, "rest_min": 1.5 },
+            { "name": "Butterfly", "sets": 3, "reps": 15, "rest_min": 1 },
+            { "name": "Triceps Pushdown", "sets": 3, "reps": 12, "rest_min": 1 }
+          ]
+        },
+        {
+          "label": "Day 2 Pull",
+          "exercises": [
+            { "name": "Wide-Grip Lat Pulldown", "sets": 4, "reps": 10, "rest_min": 1.5 },
+            { "name": "Bent Over Barbell Row", "sets": 4, "reps": 10, "rest_min": 2 },
+            { "name": "Seated Cable Rows", "sets": 3, "reps": 12, "rest_min": 1 },
+            { "name": "Barbell Curl", "sets": 3, "reps": 12, "rest_min": 1 }
+          ]
+        },
+        {
+          "label": "Day 3 Legs",
+          "exercises": [
+            { "name": "Barbell Squat", "sets": 4, "reps": 8, "rest_min": 2 },
+            { "name": "Leg Press", "sets": 4, "reps": 12, "rest_min": 2 },
+            { "name": "Leg Extensions", "sets": 3, "reps": 15, "rest_min": 1 },
+            { "name": "Lying Leg Curls", "sets": 3, "reps": 15, "rest_min": 1 },
+            { "name": "Hanging Leg Raise", "sets": 3, "reps": 15, "rest_min": 1 }
+          ]
+        }
+      ],
+      "coaching_tip": "Day 4~5는 Push·Pull을 반복하고 주말 휴식으로 회복을 확보한다."
+    },
+    {
+      "user_profile": {
+        "목적": "체지방 감소",
+        "경력": "초보자",
+        "빈도": "주 2일",
+        "장비": "홈트(맨몸/덤벨)"
+      },
+      "rationale": "전신 서킷: 동작 간 휴식 최소, 라운드 사이 2분.",
+      "circuit": {
+        "rounds": 4,
+        "rest_between_rounds_min": 2,
+        "stations": [
+          { "name": "Goblet Squat", "reps": 15 },
+          { "name": "Pushups", "reps": 15 },
+          { "name": "One-Arm Dumbbell Row", "reps_per_arm": 15 },
+          { "name": "Plank", "duration_sec": 40 }
+        ]
+      },
+      "coaching_tip": "중량이 가볍다면 대사 스트레스를 위해 동작 간 휴식을 15초 이내로 유지한다."
+    }
+  ]
+}

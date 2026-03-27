@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_background/flutter_background.dart';
+import 'package:gains_and_guide/core/auth/auth_session.dart';
 import 'package:gains_and_guide/core/bootstrap/database_bootstrap.dart';
+import 'package:gains_and_guide/core/config/app_config.dart';
 import 'package:gains_and_guide/core/database/database_helper.dart';
-import 'package:gains_and_guide/features/ai_coach/presentation/ai_coach_screen.dart';
+import 'package:gains_and_guide/core/theme/app_theme.dart';
 import 'package:gains_and_guide/features/home/presentation/body_profile_screen.dart';
 import 'package:gains_and_guide/features/home/presentation/home_screen.dart';
+import 'package:gains_and_guide/features/onboarding/presentation/onboarding_screen.dart';
+import 'package:gains_and_guide/features/onboarding/presentation/providers/onboarding_providers.dart';
 import 'package:gains_and_guide/features/routine/presentation/program_selection_screen.dart';
 
 void main() async {
@@ -13,7 +17,9 @@ void main() async {
 
   await DatabaseBootstrap.run(DatabaseHelper.instance);
 
-  // 💡 [핵심 수정] Default -> normal 로 변경하면 에러가 사라집니다.
+  final appConfig = AppConfig.fromEnvironment();
+  await AuthSession.instance.initialize(appConfig);
+
   final androidConfig = FlutterBackgroundAndroidConfig(
     notificationTitle: "Gains & Guide",
     notificationText: "운동 타이머가 백그라운드에서 실행 중입니다.",
@@ -36,23 +42,82 @@ class MyApp extends StatelessWidget {
       title: 'Gains & Guide',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.light,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF3F4F6),
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(color: Colors.black),
-          bodyMedium: TextStyle(color: Colors.black),
-          titleLarge: TextStyle(color: Colors.black),
-        ),
-        // 💡 [확인] 이곳도 CardThemeData로 되어 있는지 확인하세요.
-        cardTheme: const CardThemeData(
-          color: Colors.white,
-          elevation: 2.0,
-          surfaceTintColor: Colors.white,
+      theme: AppTheme.lightTheme,
+      home: const AppEntryPoint(),
+    );
+  }
+}
+
+class AppEntryPoint extends ConsumerStatefulWidget {
+  const AppEntryPoint({super.key});
+
+  @override
+  ConsumerState<AppEntryPoint> createState() => _AppEntryPointState();
+}
+
+class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
+  bool _onboardingJustCompleted = false;
+
+  void _handleOnboardingComplete() {
+    setState(() => _onboardingJustCompleted = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_onboardingJustCompleted) {
+      return const MainScreen();
+    }
+
+    final asyncCompleted = ref.watch(onboardingCompletedProvider);
+
+    return asyncCompleted.when(
+      data: (completed) => completed
+          ? const MainScreen()
+          : OnboardingScreen(onComplete: _handleOnboardingComplete),
+      loading: () => const _SplashScreen(),
+      error: (_, __) => const MainScreen(),
+    );
+  }
+}
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.primaryBlue,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.fitness_center,
+              size: 64,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Gains & Guide',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+              ),
+            ),
+          ],
         ),
       ),
-      home: const MainScreen(),
     );
   }
 }
@@ -70,7 +135,6 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const ProgramSelectionScreen(),
-    const AICoachScreen(),
     const BodyProfileScreen(),
   ];
 
@@ -85,13 +149,12 @@ class _MainScreenState extends State<MainScreen> {
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
         backgroundColor: Colors.white,
-        selectedItemColor: const Color(0xFF2563EB),
+        selectedItemColor: AppTheme.primaryBlue,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
           BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: '루틴'),
-          BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI 코치'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: '프로필'),
         ],
       ),

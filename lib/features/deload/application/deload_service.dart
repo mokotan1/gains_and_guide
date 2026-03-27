@@ -18,6 +18,25 @@ class DeloadService {
 
   DeloadService(this._historyRepo, this._progressionRepo, this._deloadRepo);
 
+  /// DB에 remaining_sessions > 0인 레코드가 존재하는지 확인
+  Future<bool> isCurrentlyInDeload() => _deloadRepo.isCurrentlyInDeload();
+
+  /// 진행 중인 디로드의 reductionRatio를 포함한 DeloadRecommendation 반환.
+  /// 활성 디로드가 없으면 null.
+  Future<DeloadRecommendation?> getActiveDeloadRecommendation() async {
+    final record = await _deloadRepo.getActiveDeloadRecord();
+    if (record == null) return null;
+
+    return DeloadRecommendation(
+      shouldDeload: true,
+      totalScore: (record['fatigue_score'] as num).toDouble(),
+      signals: const [],
+      reductionRatio: DeloadConstants.deloadWeightReductionRatio,
+      cycleSessions: (record['remaining_sessions'] as num).toInt(),
+      summary: (record['reason'] as String?) ?? '',
+    );
+  }
+
   /// 현재 운동 목록을 기반으로 디로드 필요 여부를 종합 평가
   Future<DeloadRecommendation> evaluateDeloadNeed(
     List<Exercise> exercises,
@@ -54,8 +73,11 @@ class DeloadService {
     }).toList();
   }
 
-  /// 디로드 이력을 DB에 기록
+  /// 디로드 이력을 DB에 기록 (이미 진행 중인 디로드가 있으면 중복 삽입 방지)
   Future<void> recordDeload(DeloadRecommendation rec) async {
+    final alreadyInDeload = await _deloadRepo.isCurrentlyInDeload();
+    if (alreadyInDeload) return;
+
     final now = DateTime.now();
     await _deloadRepo.saveDeloadRecord(
       startDate: now,

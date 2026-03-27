@@ -14,5 +14,5 @@ COPY . .
 ENV PORT=8000
 EXPOSE 8000
 
-# 서버 실행
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Render는 PORT 환경변수를 주입함 — 로컬 기본 8000
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

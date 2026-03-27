@@ -1,17 +1,20 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_vibrate/flutter_vibrate.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../../core/data/exercise_name_ko.dart';
+import '../../../core/error/app_exception.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/workout_provider.dart';
 import '../../deload/presentation/deload_banner_widget.dart';
 import '../../deload/presentation/deload_prediction_card.dart';
 import '../../routine/domain/exercise.dart';
+import '../../weekly_report/application/weekly_report_service.dart';
+import '../../weekly_report/presentation/weekly_report_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -24,12 +27,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Timer? _restTimer;
   int _remainingSeconds = 0;
   int _selectedRestTime = 180;
+  bool _weeklyReportReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkWeeklyReport();
+  }
 
   @override
   void dispose() {
     _cardioTimer?.cancel();
     _restTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _checkWeeklyReport() async {
+    try {
+      final service = ref.read(weeklyReportServiceProvider);
+      final now = DateTime.now();
+      if (now.weekday >= DateTime.monday) {
+        final lastMonday = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - 1 + 7));
+        final hasReport = await service.getOrGenerateReport(weekStart: lastMonday);
+        if (!mounted) return;
+        if (hasReport.metrics.totalSessions > 0) {
+          setState(() => _weeklyReportReady = true);
+        }
+      }
+    } catch (_) {
+      // 자동 생성 실패 시 조용히 무시
+    }
   }
 
   bool _checkIsCardio(String name) =>
@@ -135,50 +163,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _processAiRecommendation(List<Exercise> currentExercises) async {
     _showLoadingDialog();
     try {
-      // 1. 오늘의 기록 저장
       await ref.read(workoutProvider.notifier).saveCurrentWorkoutToHistory();
       await _exportHistoryToCsv();
 
-      // 2. 프로필 및 데이터 준비
       final profileRepo = ref.read(bodyProfileRepositoryProvider);
       final profile = await profileRepo.getProfile();
       String pInfo = profile != null ? "사용자 체중: ${profile['weight']}kg. " : "";
       String fullCsv = await _generateWorkoutCsv(currentExercises);
 
-      // 3. AI 서버 요청
-      final response = await http.post(
-        Uri.parse('https://gains-and-guide-1.onrender.com/chat'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'user_id': 'master_user',
+      final ApiClient apiClient = ref.read(apiClientProvider);
+      final identity = ref.read(userIdentityProvider);
+
+      final data = await apiClient.post(
+        '/chat',
+        {
+          'user_id': identity.userId,
           'message': '$pInfo 오늘 운동 기록을 분석하고 증량 가이드 데이터를 포함해서 줘.',
           'context': fullCsv,
-        }),
-      ).timeout(const Duration(seconds: 60));
+        },
+        timeout: const Duration(seconds: 60),
+      );
 
       if (!mounted) return;
-      Navigator.pop(context); // 로딩창 닫기
+      Navigator.pop(context);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (data['progression'] != null) {
+        await ref.read(workoutProvider.notifier).applyProgression(data['progression']);
+      }
 
-        // AI가 제안한 증량 데이터를 실제 주간 루틴에 자동 반영
-        if (data['progression'] != null) {
-          await ref.read(workoutProvider.notifier).applyProgression(data['progression']);
-        }
-
-        ref.read(workoutProvider.notifier).finishWorkout();
-        _showAiResultDialog(data['response']);
-      } else {
+      ref.read(workoutProvider.notifier).finishWorkout();
+      _showAiResultDialog(data['response']);
+    } on AppException catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('서버 오류: ${response.statusCode}'))
+          SnackBar(content: Text(e.userMessage), backgroundColor: Colors.red),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('정산 중 오류가 발생했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('정산 중 오류가 발생했습니다. 다시 시도해 주세요.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -223,28 +254,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       '유산소': {'런닝머신', '실내 사이클', '스텝밀(천국의 계단)'},
     };
 
-    // 카탈로그 데이터를 분석하여 해당 부위에 추가
     for (var row in catalog) {
-      final name = row['name']?.toString() ?? 'Unknown';
+      final englishName = row['name']?.toString() ?? 'Unknown';
+      final koName = ExerciseNameKo.get(englishName);
       final muscles = (row['primary_muscles']?.toString() ?? '').toLowerCase();
       final category = (row['category']?.toString() ?? '').toLowerCase();
 
       if (category.contains('cardio')) {
-        rawExerciseData['유산소']!.add(name);
+        rawExerciseData['유산소']!.add(koName);
         continue;
       }
 
       bool matched = false;
-      if (muscles.contains('chest')) { rawExerciseData['가슴']!.add(name); matched = true; }
-      if (muscles.contains('lats') || muscles.contains('middle back') || muscles.contains('lower back') || muscles.contains('back')) { rawExerciseData['등']!.add(name); matched = true; }
-      if (muscles.contains('quadriceps') || muscles.contains('hamstrings') || muscles.contains('glutes') || muscles.contains('calves') || muscles.contains('legs')) { rawExerciseData['하체']!.add(name); matched = true; }
-      if (muscles.contains('shoulders') || muscles.contains('delts')) { rawExerciseData['어깨']!.add(name); matched = true; }
-      if (muscles.contains('biceps') || muscles.contains('triceps') || muscles.contains('forearms') || muscles.contains('arms')) { rawExerciseData['팔']!.add(name); matched = true; }
-      if (muscles.contains('abs') || muscles.contains('core')) { rawExerciseData['복근']!.add(name); matched = true; }
+      if (muscles.contains('chest')) { rawExerciseData['가슴']!.add(koName); matched = true; }
+      if (muscles.contains('lats') || muscles.contains('middle back') || muscles.contains('lower back') || muscles.contains('back')) { rawExerciseData['등']!.add(koName); matched = true; }
+      if (muscles.contains('quadriceps') || muscles.contains('hamstrings') || muscles.contains('glutes') || muscles.contains('calves') || muscles.contains('legs')) { rawExerciseData['하체']!.add(koName); matched = true; }
+      if (muscles.contains('shoulders') || muscles.contains('delts')) { rawExerciseData['어깨']!.add(koName); matched = true; }
+      if (muscles.contains('biceps') || muscles.contains('triceps') || muscles.contains('forearms') || muscles.contains('arms')) { rawExerciseData['팔']!.add(koName); matched = true; }
+      if (muscles.contains('abs') || muscles.contains('core')) { rawExerciseData['복근']!.add(koName); matched = true; }
 
-      // 해당하는 부위가 없으면 '기타' 카테고리로 분류
       if (!matched) {
-        rawExerciseData['기타']!.add(name);
+        rawExerciseData['기타']!.add(koName);
       }
     }
 
@@ -761,6 +791,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text('Gains & Guide'),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const WeeklyReportScreen()),
+            ),
+            icon: const Icon(Icons.bar_chart_rounded),
+            tooltip: '주간 레포트',
+          ),
           if (!isFinished) ...[
             IconButton(onPressed: _showCardioSelectionDialog, icon: const Icon(Icons.directions_run, color: AppTheme.warningOrange)),
             IconButton(onPressed: _showAddExerciseDialog, icon: const Icon(Icons.add_circle, color: AppTheme.primaryBlue)),
@@ -771,6 +809,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            if (_weeklyReportReady) _buildWeeklyReportBanner(),
             if (deloadRec != null && deloadRec.shouldDeload)
               DeloadBannerWidget(recommendation: deloadRec)
             else if (deloadRec != null)
@@ -928,7 +967,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ? '목표 시간: ${setRep}분'
         : '${setWeight.toStringAsFixed(1)}kg × ${setRep}회';
 
-    return ListTile(
+    final canDelete = !isFinished && ex.sets > 1;
+
+    final tile = ListTile(
       dense: true,
       leading: CircleAvatar(
         radius: 14,
@@ -973,6 +1014,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         onChanged: isFinished ? null : (v) => _toggleSetStatus(exIdx, sIdx, ref.read(workoutProvider)),
       ),
     );
+
+    if (!canDelete) return tile;
+
+    return Dismissible(
+      key: ValueKey('${ex.id}_set_$sIdx'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red.shade400,
+        child: const Icon(Icons.delete_outline, color: Colors.white),
+      ),
+      onDismissed: (_) {
+        ref.read(workoutProvider.notifier).removeSetFromExercise(exIdx, sIdx);
+      },
+      child: tile,
+    );
   }
 
   Widget _buildExerciseList(List<Exercise> exercises, bool isFinished) {
@@ -1008,7 +1066,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: ex.failedSetCount > 0 ? Colors.red.shade400 : Colors.black54,
                 ),
               ),
-              children: List.generate(ex.sets, (sIdx) => _buildSetRow(ex, idx, sIdx, isFinished)),
+              children: [
+                ...List.generate(ex.sets, (sIdx) => _buildSetRow(ex, idx, sIdx, isFinished)),
+                if (!isFinished)
+                  ListTile(
+                    dense: true,
+                    leading: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: Colors.grey[200],
+                      child: Icon(Icons.add, size: 16, color: Colors.grey[500]),
+                    ),
+                    title: Text('세트 추가', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                    onTap: () => ref.read(workoutProvider.notifier).addSetToExercise(idx),
+                  ),
+              ],
             ),
           );
         },
@@ -1063,6 +1134,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Text(
         '남은 세트를 모두 완료하면 정산 버튼이 나타납니다. ($comp/$tot)',
         style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildWeeklyReportBanner() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const WeeklyReportScreen()),
+        );
+        setState(() => _weeklyReportReady = false);
+      },
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.primaryBlue.withValues(alpha: 0.1),
+              AppTheme.primaryBlue.withValues(alpha: 0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.bar_chart_rounded, color: AppTheme.primaryBlue, size: 28),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '지난 주 레포트가 준비되었습니다',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    '탭하여 퍼포먼스 리뷰를 확인하세요',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.primaryBlue),
+          ],
+        ),
       ),
     );
   }

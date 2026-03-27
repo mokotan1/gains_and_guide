@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../../features/routine/domain/exercise_catalog.dart';
+import '../domain/models/cardio_catalog.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -17,7 +18,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 7,
+      version: 11,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -52,8 +53,25 @@ class DatabaseHelper {
       )
     ''');
     await _createExerciseCatalogTable(db);
+    await _createCardioCatalogTable(db);
+    await _createFavoriteExercisesTable(db);
     await _createRoutineTables(db);
     await _createDeloadHistoryTable(db);
+    await _createWeeklyReportsTable(db);
+    await _createUserProfileTable(db);
+  }
+
+  Future _createWeeklyReportsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS weekly_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_start TEXT NOT NULL,
+        week_end TEXT NOT NULL,
+        report_json TEXT NOT NULL,
+        generated_at TEXT NOT NULL,
+        UNIQUE(week_start)
+      )
+    ''');
   }
 
   Future _createDeloadHistoryTable(Database db) async {
@@ -111,7 +129,48 @@ class DatabaseHelper {
         category TEXT,
         equipment TEXT,
         primary_muscles TEXT,
-        instructions TEXT
+        secondary_muscles TEXT,
+        instructions TEXT,
+        level TEXT,
+        force_type TEXT,
+        mechanic TEXT
+      )
+    ''');
+  }
+
+  Future _createCardioCatalogTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cardio_catalog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        equipment TEXT NOT NULL DEFAULT '',
+        instructions TEXT NOT NULL DEFAULT '',
+        level TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+  }
+
+  Future _createUserProfileTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_profile (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        goal TEXT NOT NULL,
+        level TEXT NOT NULL,
+        frequency TEXT NOT NULL,
+        equipment TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future _createFavoriteExercisesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS favorite_exercises (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exercise_catalog_id INTEGER NOT NULL,
+        is_cardio INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        UNIQUE(exercise_catalog_id, is_cardio)
       )
     ''');
   }
@@ -149,6 +208,36 @@ class DatabaseHelper {
         ADD COLUMN remaining_sessions INTEGER NOT NULL DEFAULT 0
       ''');
     }
+    if (oldVersion < 8) {
+      await _createWeeklyReportsTable(db);
+    }
+    if (oldVersion < 9) {
+      await db.execute(
+          'ALTER TABLE exercise_catalog ADD COLUMN secondary_muscles TEXT');
+      await db.execute(
+          'ALTER TABLE exercise_catalog ADD COLUMN level TEXT');
+      await db.execute(
+          'ALTER TABLE exercise_catalog ADD COLUMN force_type TEXT');
+      await db.execute(
+          'ALTER TABLE exercise_catalog ADD COLUMN mechanic TEXT');
+      await db.execute('DELETE FROM exercise_catalog');
+    }
+    if (oldVersion < 10) {
+      await _createCardioCatalogTable(db);
+      await _createFavoriteExercisesTable(db);
+      await db.execute('''
+        INSERT INTO cardio_catalog (name, equipment, instructions, level)
+        SELECT name, equipment, instructions, level
+        FROM exercise_catalog
+        WHERE LOWER(category) = 'cardio'
+      ''');
+      await db.execute('''
+        DELETE FROM exercise_catalog WHERE LOWER(category) = 'cardio'
+      ''');
+    }
+    if (oldVersion < 11) {
+      await _createUserProfileTable(db);
+    }
   }
 
   // 운동 카탈로그 시딩
@@ -183,6 +272,157 @@ class DatabaseHelper {
       whereArgs: ['%$keyword%'],
     );
     return res.map((map) => ExerciseCatalog.fromMap(map)).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cardio catalog
+  // ---------------------------------------------------------------------------
+
+  Future<void> seedCardioCatalog(List<Map<String, dynamic>> exercises) async {
+    final db = await instance.database;
+    final batch = db.batch();
+    for (var exercise in exercises) {
+      batch.insert('cardio_catalog', exercise);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<bool> isCardioCatalogEmpty() async {
+    final db = await instance.database;
+    final count = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT COUNT(*) FROM cardio_catalog'));
+    return count == 0;
+  }
+
+  Future<List<CardioCatalog>> getCardioCatalogAll() async {
+    final db = await instance.database;
+    final res = await db.query('cardio_catalog', orderBy: 'name ASC');
+    return res.map((m) => CardioCatalog.fromMap(m)).toList();
+  }
+
+  Future<List<CardioCatalog>> searchCardioCatalog(String keyword) async {
+    final db = await instance.database;
+    final res = await db.query(
+      'cardio_catalog',
+      where: 'name LIKE ?',
+      whereArgs: ['%$keyword%'],
+      orderBy: 'name ASC',
+    );
+    return res.map((m) => CardioCatalog.fromMap(m)).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Exercise catalog — advanced search
+  // ---------------------------------------------------------------------------
+
+  /// 부위 + 장비 필터 검색. SQL LIKE로 primary_muscles와 equipment를 필터링.
+  Future<List<ExerciseCatalog>> searchCatalogWithFilters({
+    String keyword = '',
+    List<String> muscleKeys = const [],
+    String? equipment,
+  }) async {
+    final db = await instance.database;
+    final where = <String>[];
+    final args = <dynamic>[];
+
+    if (keyword.isNotEmpty) {
+      where.add('name LIKE ?');
+      args.add('%$keyword%');
+    }
+    if (muscleKeys.isNotEmpty) {
+      final muscleWhere =
+          muscleKeys.map((_) => 'LOWER(primary_muscles) LIKE ?').join(' OR ');
+      where.add('($muscleWhere)');
+      args.addAll(muscleKeys.map((k) => '%$k%'));
+    }
+    if (equipment != null && equipment.isNotEmpty) {
+      where.add('LOWER(equipment) LIKE ?');
+      args.add('%${equipment.toLowerCase()}%');
+    }
+
+    final res = await db.query(
+      'exercise_catalog',
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'name ASC',
+    );
+    return res.map((m) => ExerciseCatalog.fromMap(m)).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Favorite exercises
+  // ---------------------------------------------------------------------------
+
+  Future<void> addFavorite(int catalogId, {bool isCardio = false}) async {
+    final db = await instance.database;
+    await db.insert(
+      'favorite_exercises',
+      {
+        'exercise_catalog_id': catalogId,
+        'is_cardio': isCardio ? 1 : 0,
+        'created_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<void> removeFavorite(int catalogId, {bool isCardio = false}) async {
+    final db = await instance.database;
+    await db.delete(
+      'favorite_exercises',
+      where: 'exercise_catalog_id = ? AND is_cardio = ?',
+      whereArgs: [catalogId, isCardio ? 1 : 0],
+    );
+  }
+
+  Future<Set<int>> getFavoriteIds({bool isCardio = false}) async {
+    final db = await instance.database;
+    final res = await db.query(
+      'favorite_exercises',
+      columns: ['exercise_catalog_id'],
+      where: 'is_cardio = ?',
+      whereArgs: [isCardio ? 1 : 0],
+    );
+    return res.map((r) => r['exercise_catalog_id'] as int).toSet();
+  }
+
+  Future<List<ExerciseCatalog>> getFavoriteExercises() async {
+    final db = await instance.database;
+    final res = await db.rawQuery('''
+      SELECT ec.* FROM exercise_catalog ec
+      INNER JOIN favorite_exercises fe
+        ON ec.id = fe.exercise_catalog_id AND fe.is_cardio = 0
+      ORDER BY fe.created_at DESC
+    ''');
+    return res.map((m) => ExerciseCatalog.fromMap(m)).toList();
+  }
+
+  Future<List<CardioCatalog>> getFavoriteCardioExercises() async {
+    final db = await instance.database;
+    final res = await db.rawQuery('''
+      SELECT cc.* FROM cardio_catalog cc
+      INNER JOIN favorite_exercises fe
+        ON cc.id = fe.exercise_catalog_id AND fe.is_cardio = 1
+      ORDER BY fe.created_at DESC
+    ''');
+    return res.map((m) => CardioCatalog.fromMap(m)).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Recent exercises (from workout_history)
+  // ---------------------------------------------------------------------------
+
+  /// 가장 최근에 수행한 운동 이름을 중복 없이 N개 반환한다.
+  Future<List<String>> getRecentExerciseNames({int limit = 5}) async {
+    final db = await instance.database;
+    final res = await db.rawQuery('''
+      SELECT name, MAX(date) AS last_date
+      FROM workout_history
+      GROUP BY name
+      ORDER BY last_date DESC
+      LIMIT ?
+    ''', [limit]);
+    return res.map((r) => r['name'] as String).toList();
   }
 
   // 증량 기록 저장 및 최신 무게 가져오기
@@ -353,5 +593,130 @@ class DatabaseHelper {
       SET remaining_sessions = remaining_sessions - 1
       WHERE remaining_sessions > 0
     ''');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Workout history — date range queries (주간 레포트용)
+  // ---------------------------------------------------------------------------
+
+  /// 날짜 범위 내의 모든 운동 기록 조회
+  Future<List<Map<String, dynamic>>> getHistoryForDateRange(
+    String startDate,
+    String endDate,
+  ) async {
+    final db = await instance.database;
+    return db.rawQuery('''
+      SELECT * FROM workout_history
+      WHERE SUBSTR(date, 1, 10) >= ? AND SUBSTR(date, 1, 10) <= ?
+      ORDER BY date ASC
+    ''', [startDate, endDate]);
+  }
+
+  /// 최근 N주간의 주별 총 볼륨 리스트 반환 (최신순, 이번 주 제외)
+  Future<List<double>> getWeeklyVolumes(int weekCount) async {
+    final db = await instance.database;
+    final now = DateTime.now();
+
+    final results = <double>[];
+    for (int i = 1; i <= weekCount; i++) {
+      final weekEnd = now.subtract(Duration(days: 7 * i - (7 - now.weekday % 7)));
+      final weekStart = weekEnd.subtract(const Duration(days: 6));
+      final startStr = _dateStr(weekStart);
+      final endStr = _dateStr(weekEnd);
+
+      final rows = await db.rawQuery('''
+        SELECT COALESCE(SUM(weight * reps), 0) AS volume
+        FROM workout_history
+        WHERE SUBSTR(date, 1, 10) >= ? AND SUBSTR(date, 1, 10) <= ?
+      ''', [startStr, endStr]);
+
+      final volume = (rows.first['volume'] as num?)?.toDouble() ?? 0;
+      results.add(volume);
+    }
+    return results;
+  }
+
+  static String _dateStr(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  // ---------------------------------------------------------------------------
+  // Weekly reports
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveWeeklyReport({
+    required String weekStart,
+    required String weekEnd,
+    required String reportJson,
+    required String generatedAt,
+  }) async {
+    final db = await instance.database;
+    await db.insert(
+      'weekly_reports',
+      {
+        'week_start': weekStart,
+        'week_end': weekEnd,
+        'report_json': reportJson,
+        'generated_at': generatedAt,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, dynamic>?> getWeeklyReport(String weekStart) async {
+    final db = await instance.database;
+    final res = await db.query(
+      'weekly_reports',
+      where: 'week_start = ?',
+      whereArgs: [weekStart],
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentWeeklyReports(int limit) async {
+    final db = await instance.database;
+    return db.query(
+      'weekly_reports',
+      orderBy: 'week_start DESC',
+      limit: limit,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // User profile (온보딩 설문)
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveUserProfile(Map<String, dynamic> profile) async {
+    final db = await instance.database;
+    await db.insert(
+      'user_profile',
+      profile,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, dynamic>?> getUserProfile() async {
+    final db = await instance.database;
+    final res = await db.query('user_profile', limit: 1);
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  Future<bool> hasUserProfile() async {
+    final db = await instance.database;
+    final count = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT COUNT(*) FROM user_profile'));
+    return (count ?? 0) > 0;
+  }
+
+  /// remaining_sessions > 0인 활성 디로드 레코드 반환 (없으면 null)
+  Future<Map<String, dynamic>?> getActiveDeloadRecord() async {
+    final db = await instance.database;
+    final res = await db.query(
+      'deload_history',
+      where: 'remaining_sessions > 0',
+      orderBy: 'id DESC',
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first : null;
   }
 }

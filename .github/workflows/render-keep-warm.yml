@@ -1,0 +1,38 @@
+# Render 무료 티어 슬립 완화 + 생존 확인.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   RENDER_API_BASE_URL  예: https://gains-and-guide-1.onrender.com  (끝 슬래시 없이)
+#
+name: Render keep-warm
+
+on:
+  schedule:
+    # UTC 매 6시간 (한국시간 기준 03,09,15,21시 부근)
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: render-keep-warm
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping public API root
+        env:
+          BASE_URL: ${{ secrets.RENDER_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_URL:-}" ]; then
+            echo "::error::Secret RENDER_API_BASE_URL is not set (e.g. https://your-service.onrender.com)"
+            exit 1
+          fi
+          url="${BASE_URL%/}"
+          echo "GET ${url}/"
+          code=$(curl -sS -o /tmp/body.json -w "%{http_code}" --max-time 90 "${url}/")
+          echo "HTTP ${code}"
+          head -c 400 /tmp/body.json || true
+          echo
+          test "$code" = "200"

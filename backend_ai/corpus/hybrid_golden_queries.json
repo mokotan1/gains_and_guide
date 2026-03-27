@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {
+      "query": "Epley 1RM formula weight reps",
+      "user_namespace": null,
+      "expect_corpus_ids": [],
+      "expect_user_ids": []
+    }
+  ]
+}

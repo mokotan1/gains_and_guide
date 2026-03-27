@@ -39,12 +39,19 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     }
   }
 
-  /// 현재 state 기반으로 피로도만 재평가 (무게 변경 없이 점수만 갱신)
+  /// 앱 재시작 시 피로도를 재평가하되, 진행 중인 디로드 상태는 보존
   Future<void> _refreshFatigueScore() async {
     if (state.isEmpty) {
       deloadRecommendation = null;
       return;
     }
+
+    final activeRec = await _deloadService.getActiveDeloadRecommendation();
+    if (activeRec != null) {
+      deloadRecommendation = activeRec;
+      return;
+    }
+
     deloadRecommendation = await _deloadService.evaluateDeloadNeed(state);
   }
 
@@ -170,6 +177,39 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     _saveCurrentSession();
   }
 
+  void addSetToExercise(int exIdx) {
+    final newState = [...state];
+    final ex = newState[exIdx];
+    final lastWeight = ex.setWeights.isNotEmpty ? ex.setWeights.last : ex.weight;
+    final lastReps = ex.setReps.isNotEmpty ? ex.setReps.last : ex.reps;
+    newState[exIdx] = ex.copyWith(
+      sets: ex.sets + 1,
+      setStatus: [...ex.setStatus, false],
+      setRpe: [...ex.setRpe, null],
+      setWeights: [...ex.setWeights, lastWeight],
+      setReps: [...ex.setReps, lastReps],
+      setFailed: [...ex.setFailed, false],
+    );
+    state = newState;
+    _saveCurrentSession();
+  }
+
+  void removeSetFromExercise(int exIdx, int sIdx) {
+    final newState = [...state];
+    final ex = newState[exIdx];
+    if (ex.sets <= 1) return;
+    newState[exIdx] = ex.copyWith(
+      sets: ex.sets - 1,
+      setStatus: [...ex.setStatus]..removeAt(sIdx),
+      setRpe: [...ex.setRpe]..removeAt(sIdx),
+      setWeights: [...ex.setWeights]..removeAt(sIdx),
+      setReps: [...ex.setReps]..removeAt(sIdx),
+      setFailed: [...ex.setFailed]..removeAt(sIdx),
+    );
+    state = newState;
+    _saveCurrentSession();
+  }
+
   Future<void> updateRoutineByDay() async {
     final weekday = DateTime.now().weekday;
     List<Exercise> routine = _currentWeeklyRoutine[weekday] ?? [];
@@ -192,40 +232,34 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
         ));
       }
 
-      final cycleSessions = _currentWeeklyRoutine.length;
-      var rec = await _deloadService.evaluateDeloadNeed(updatedRoutine);
+      final activeRec = await _deloadService.getActiveDeloadRecommendation();
 
-      if (rec.shouldDeload && rec.cycleSessions != cycleSessions) {
-        rec = DeloadRecommendation(
-          shouldDeload: true,
-          totalScore: rec.totalScore,
-          signals: rec.signals,
-          reductionRatio: rec.reductionRatio,
-          cycleSessions: cycleSessions,
-          summary: rec.summary,
-        );
-      }
-
-      // TODO: 수동 디로드 강제 적용 — 디로드 주간 종료 후 이 블록 제거
-      if (!rec.shouldDeload) {
-        rec = DeloadRecommendation(
-          shouldDeload: true,
-          totalScore: 65.0,
-          signals: rec.signals,
-          reductionRatio: 0.60,
-          cycleSessions: cycleSessions,
-          summary: '수동 디로드 적용 (65점)',
-        );
-      }
-      // TODO: 여기까지 제거
-
-      deloadRecommendation = rec;
-
-      if (rec.shouldDeload) {
-        state = _deloadService.applyDeload(updatedRoutine, rec);
-        await _deloadService.recordDeload(rec);
+      if (activeRec != null) {
+        deloadRecommendation = activeRec;
+        state = _deloadService.applyDeload(updatedRoutine, activeRec);
       } else {
-        state = updatedRoutine;
+        final cycleSessions = _currentWeeklyRoutine.length;
+        var rec = await _deloadService.evaluateDeloadNeed(updatedRoutine);
+
+        if (rec.shouldDeload && rec.cycleSessions != cycleSessions) {
+          rec = DeloadRecommendation(
+            shouldDeload: true,
+            totalScore: rec.totalScore,
+            signals: rec.signals,
+            reductionRatio: rec.reductionRatio,
+            cycleSessions: cycleSessions,
+            summary: rec.summary,
+          );
+        }
+
+        deloadRecommendation = rec;
+
+        if (rec.shouldDeload) {
+          state = _deloadService.applyDeload(updatedRoutine, rec);
+          await _deloadService.recordDeload(rec);
+        } else {
+          state = updatedRoutine;
+        }
       }
     } else {
       deloadRecommendation = null;
