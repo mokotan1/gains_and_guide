@@ -11,7 +11,7 @@ import catalog
 import prompts
 from graphs.coach_graph import build_coach_agent
 from routers.coach import router as coach_router
-from services.rag import RagService
+from services.rag import create_rag_service
 from state import app_deps
 
 logging.basicConfig(level=logging.INFO)
@@ -24,8 +24,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 catalog.load_catalog(BASE_DIR)
 app_deps.assets = prompts.load_prompt_assets(BASE_DIR)
 
-_chunks_path = os.path.join(BASE_DIR, "corpus", "chunks.jsonl")
-app_deps.rag = RagService(_chunks_path)
+app_deps.rag = create_rag_service(BASE_DIR)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if GROQ_API_KEY:
@@ -54,6 +53,7 @@ def read_root() -> dict:
         "message": "Gains & Guide AI Coach Server is Running!",
         "features": {
             "rag_corpus": bool(app_deps.rag and app_deps.rag.chunk_count > 0),
+            "rag_mode": getattr(app_deps.rag, "mode", "token"),
             "agent": app_deps.coach_agent is not None,
         },
     }

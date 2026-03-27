@@ -1,0 +1,3 @@
+# 로컬 임베딩 인덱스 (OPENAI 키로 ingest 후 생성)
+corpus/vector_index.json
+.env

@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from services.rag import RagService, RetrievedChunk, format_references
+from services.rag import (
+    RagService,
+    TokenOverlapRetriever,
+    create_rag_service,
+    load_chunks_jsonl,
+)
+from services.rag_types import RetrievedChunk, format_references
 
 
 class TestRagService(unittest.TestCase):
-    def test_empty_path_returns_no_results(self) -> None:
-        svc = RagService(None)
+    def test_empty_chunks_returns_no_results(self) -> None:
+        chunks: list = []
+        svc = RagService(chunks, retriever=TokenOverlapRetriever(chunks), mode="token")
         self.assertEqual(svc.retrieve("anything"), [])
         self.assertEqual(svc.chunk_count, 0)
 
@@ -48,7 +56,10 @@ class TestRagService(unittest.TestCase):
             )
             path = f.name
         try:
-            svc = RagService(path)
+            chunks = load_chunks_jsonl(path)
+            svc = RagService(
+                chunks, retriever=TokenOverlapRetriever(chunks), mode="token"
+            )
             hits = svc.retrieve("Epley 1RM weight", top_k=2)
             self.assertTrue(hits)
             self.assertEqual(hits[0].chunk_id, "a")
@@ -74,7 +85,10 @@ class TestRagService(unittest.TestCase):
             )
             path = f.name
         try:
-            svc = RagService(path)
+            chunks = load_chunks_jsonl(path)
+            svc = RagService(
+                chunks, retriever=TokenOverlapRetriever(chunks), mode="token"
+            )
             self.assertEqual(svc.retrieve("squat", namespace="corpus"), [])
             self.assertEqual(len(svc.retrieve("squat", namespace="user_x")), 1)
         finally:
@@ -95,6 +109,36 @@ class TestRagService(unittest.TestCase):
         )
         self.assertIn("...", s)
         self.assertLess(len(s), len(long_text) + 100)
+
+
+class TestCreateRagService(unittest.TestCase):
+    def test_forces_token_when_backend_token(self) -> None:
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        old = os.environ.get("RAG_BACKEND")
+        try:
+            os.environ["RAG_BACKEND"] = "token"
+            svc = create_rag_service(root)
+            self.assertEqual(svc.mode, "token")
+        finally:
+            if old is None:
+                os.environ.pop("RAG_BACKEND", None)
+            else:
+                os.environ["RAG_BACKEND"] = old
+
+
+class TestGoldenQueriesFile(unittest.TestCase):
+    def test_structure(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        path = root / "corpus" / "golden_queries.json"
+        self.assertTrue(path.is_file())
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+        cases = data.get("cases", [])
+        self.assertTrue(len(cases) >= 1)
+        for c in cases:
+            self.assertIn("query", c)
+            self.assertIn("expected_ids", c)
+            self.assertIsInstance(c["expected_ids"], list)
 
 
 if __name__ == "__main__":

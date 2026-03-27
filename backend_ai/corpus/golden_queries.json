@@ -1,0 +1,25 @@
+{
+  "description": "RAG recall@k 평가용 골든 쿼리 (corpus/chunks.jsonl 기준 id)",
+  "cases": [
+    {
+      "query": "Epley 공식으로 예상 1RM 계산하는 방법",
+      "expected_ids": ["spec-epley-1"],
+      "namespace": "corpus"
+    },
+    {
+      "query": "점진적 과부하 프로그램 짤 때 주의할 점",
+      "expected_ids": ["coaching-progressive-1"],
+      "namespace": "corpus"
+    },
+    {
+      "query": "RPE가 너무 높을 때 회복",
+      "expected_ids": ["safety-rpe-1"],
+      "namespace": "corpus"
+    },
+    {
+      "query": "한국어로 등 운동 부위 영어 매칭",
+      "expected_ids": ["anatomy-lats-1"],
+      "namespace": "corpus"
+    }
+  ]
+}
