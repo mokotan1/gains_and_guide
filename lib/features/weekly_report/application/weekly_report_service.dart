@@ -13,6 +13,7 @@ import '../domain/models/weekly_report.dart';
 import '../domain/repositories/weekly_report_repository.dart';
 import '../domain/weekly_metrics_calculator.dart';
 import '../domain/weekly_report_generator.dart';
+import '../../user_memory/application/user_memory_sync_service.dart';
 import 'routine_recommendation_service.dart';
 
 /// 주간 레포트 오케스트레이터.
@@ -50,6 +51,7 @@ class WeeklyReportService {
 
     final report = await _generateReport(monday, sunday);
     await _reportRepo.saveReport(report);
+    await _maybeUploadMemoryForReport(report);
     return report;
   }
 
@@ -60,6 +62,7 @@ class WeeklyReportService {
 
     final report = await _generateReport(monday, sunday);
     await _reportRepo.saveReport(report);
+    await _maybeUploadMemoryForReport(report);
     return report;
   }
 
@@ -123,6 +126,14 @@ class WeeklyReportService {
   // ---------------------------------------------------------------------------
   // Private
   // ---------------------------------------------------------------------------
+
+  Future<void> _maybeUploadMemoryForReport(WeeklyReport report) async {
+    if (!UserMemorySyncService.enabled) return;
+    final weekKey =
+        '${report.weekStart.year}-${report.weekStart.month.toString().padLeft(2, '0')}-${report.weekStart.day.toString().padLeft(2, '0')}';
+    final text = _buildAiSummaryPayload(report.metrics);
+    await UserMemorySyncService(_apiClient).uploadWeeklyDigest(weekKey, text);
+  }
 
   Future<WeeklyReport> _generateReport(
     DateTime monday,

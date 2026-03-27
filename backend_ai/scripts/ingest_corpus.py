@@ -101,10 +101,12 @@ def main() -> int:
             return 2
         from pinecone import Pinecone
 
+        from services.pinecone_batch import upsert_vector_batches
+
         pc = Pinecone(api_key=pc_key)
         index = pc.Index(index_name)
         ns = (args.pinecone_namespace or "corpus").strip()
-        batch: list[dict] = []
+        upsert_rows: list[dict] = []
         for c, vec in zip(chunks, vectors):
             cid = str(c.get("id", ""))
             if not cid:
@@ -117,13 +119,9 @@ def main() -> int:
                 "namespace": str(c.get("namespace", "corpus")),
                 "license": str(c.get("license", "")),
             }
-            batch.append({"id": cid, "values": vec, "metadata": meta})
-            if len(batch) >= 100:
-                index.upsert(vectors=batch, namespace=ns)
-                batch = []
-        if batch:
-            index.upsert(vectors=batch, namespace=ns)
-        print(f"Upserted {len(chunks)} vectors to Pinecone index={index_name!r} namespace={ns!r}")
+            upsert_rows.append({"id": cid, "values": vec, "metadata": meta})
+        upsert_vector_batches(index, ns, upsert_rows)
+        print(f"Upserted {len(upsert_rows)} vectors to Pinecone index={index_name!r} namespace={ns!r}")
         return 0
 
     records = []

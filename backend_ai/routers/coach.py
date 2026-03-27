@@ -17,7 +17,10 @@ import prompts
 from graphs.coach_graph import COACH_SCHEMA_RETRY_USER_SUFFIX, run_coach_agent
 from rate_limits import coach_rate_limit_string, limiter
 from services.coach_response_schema import CoachChatResponse, coerce_raw_coach_dict
+from routers.auth_deps import resolve_request_subject
+from services.hybrid_retrieval import hybrid_rag_config_from_env, retrieve_corpus_and_user
 from services.rag import format_references
+from services.user_namespace import user_vector_namespace
 from state import app_deps
 
 logger = logging.getLogger(__name__)
@@ -28,21 +31,18 @@ _COACH_RATE_LIMIT = coach_rate_limit_string()
 
 
 class ChatRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     message: str
     context: str = ""
 
 
 class RecommendRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     weekly_summary: str
 
 
-def _rag_top_k() -> int:
-    try:
-        return int(os.getenv("RAG_TOP_K", "5"))
-    except ValueError:
-        return 5
+def _corpus_namespace() -> str:
+    return os.getenv("PINECONE_NAMESPACE", "corpus").strip() or "corpus"
 
 
 def _use_legacy_chat() -> bool:
@@ -66,7 +66,7 @@ def _public_error_message(exc: BaseException) -> str:
     return "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
 
-def _build_chat_system_base(user_message: str) -> str:
+def _build_chat_system_base(user_message: str, user_subject: str) -> str:
     if not app_deps.assets:
         raise HTTPException(status_code=500, detail="프롬프트 자산이 로드되지 않았습니다.")
     s = prompts.append_routine_guide(
@@ -74,13 +74,24 @@ def _build_chat_system_base(user_message: str) -> str:
     )
     s = prompts.append_catalog(s, catalog.exercise_catalog_text)
     if app_deps.rag:
-        chunks = app_deps.rag.retrieve(user_message, top_k=_rag_top_k())
-        if chunks:
-            s += "\n\n[References — 코퍼스 RAG]\n" + format_references(chunks)
+        cfg = hybrid_rag_config_from_env()
+        user_ns = user_vector_namespace(user_subject)
+        corp_ns = _corpus_namespace()
+        corpus_chunks, user_chunks = retrieve_corpus_and_user(
+            app_deps.rag,
+            user_message,
+            user_namespace=user_ns,
+            cfg=cfg,
+            corpus_namespace=corp_ns,
+        )
+        if corpus_chunks:
+            s += "\n\n[References — 코퍼스 RAG]\n" + format_references(corpus_chunks)
+        if user_chunks:
+            s += "\n\n[References — 내 메모리]\n" + format_references(user_chunks)
     return s
 
 
-def _build_recommend_system_base(weekly_summary: str) -> str:
+def _build_recommend_system_base(weekly_summary: str, user_subject: str) -> str:
     if not app_deps.assets:
         raise HTTPException(status_code=500, detail="프롬프트 자산이 로드되지 않았습니다.")
     s = prompts.append_routine_guide(
@@ -88,9 +99,20 @@ def _build_recommend_system_base(weekly_summary: str) -> str:
     )
     s = prompts.append_catalog(s, catalog.exercise_catalog_text)
     if app_deps.rag:
-        chunks = app_deps.rag.retrieve(weekly_summary, top_k=_rag_top_k())
-        if chunks:
-            s += "\n\n[References — 코퍼스 RAG]\n" + format_references(chunks)
+        cfg = hybrid_rag_config_from_env()
+        user_ns = user_vector_namespace(user_subject)
+        corp_ns = _corpus_namespace()
+        corpus_chunks, user_chunks = retrieve_corpus_and_user(
+            app_deps.rag,
+            weekly_summary,
+            user_namespace=user_ns,
+            cfg=cfg,
+            corpus_namespace=corp_ns,
+        )
+        if corpus_chunks:
+            s += "\n\n[References — 코퍼스 RAG]\n" + format_references(corpus_chunks)
+        if user_chunks:
+            s += "\n\n[References — 내 메모리]\n" + format_references(user_chunks)
     return s
 
 
@@ -155,11 +177,11 @@ async def _run_agent_with_timeout(
 @router.post("/chat")
 @limiter.limit(_COACH_RATE_LIMIT)
 async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]:
-    _ = request
+    user_subject = resolve_request_subject(request, body.user_id)
     if not app_deps.groq_client or not app_deps.groq_api_key:
         raise HTTPException(status_code=500, detail="서버에 Groq API 키가 없습니다.")
 
-    system_prompt = _build_chat_system_base(body.message)
+    system_prompt = _build_chat_system_base(body.message, user_subject)
     user_content = (
         f"[과거 운동 기록]\n{body.context}\n\n[질문]\n{body.message}"
     )
@@ -250,11 +272,11 @@ async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]
 @router.post("/recommend")
 @limiter.limit(_COACH_RATE_LIMIT)
 async def recommend_routine(request: Request, body: RecommendRequest) -> dict[str, Any]:
-    _ = request
+    user_subject = resolve_request_subject(request, body.user_id)
     if not app_deps.groq_client:
         raise HTTPException(status_code=500, detail="서버에 Groq API 키가 없습니다.")
 
-    system_prompt = _build_recommend_system_base(body.weekly_summary)
+    system_prompt = _build_recommend_system_base(body.weekly_summary, user_subject)
     messages = [
         {"role": "system", "content": system_prompt},
         {

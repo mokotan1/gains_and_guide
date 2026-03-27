@@ -13,7 +13,9 @@ import catalog
 import prompts
 from graphs.coach_graph import build_coach_agent
 from rate_limits import limiter
+from routers.auth import router as auth_router
 from routers.coach import router as coach_router
+from routers.memory import router as memory_router
 from services.rag import create_rag_service
 from state import app_deps
 
@@ -49,6 +51,8 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(coach_router)
+app.include_router(auth_router)
+app.include_router(memory_router)
 
 
 @app.get("/")
@@ -60,6 +64,9 @@ def read_root() -> dict:
             "rag_corpus": bool(app_deps.rag and app_deps.rag.chunk_count > 0),
             "rag_mode": getattr(app_deps.rag, "mode", "token"),
             "agent": app_deps.coach_agent is not None,
+            "auth_jwt": bool(os.getenv("AUTH_JWT_SECRET", "").strip()),
+            "memory_api": os.getenv("MEMORY_API_ENABLED", "1").strip().lower()
+            in ("1", "true", "yes"),
         },
     }
 

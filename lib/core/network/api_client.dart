@@ -14,11 +14,14 @@ import '../error/app_exception.dart';
 class ApiClient {
   final AppConfig _config;
   final http.Client _httpClient;
+  final Map<String, String> Function()? _extraHeaders;
 
   ApiClient(
     this._config, {
     http.Client? httpClient,
-  }) : _httpClient = httpClient ?? http.Client();
+    Map<String, String> Function()? extraHeaders,
+  })  : _httpClient = httpClient ?? http.Client(),
+        _extraHeaders = extraHeaders;
 
   /// JSON POST 요청을 보내고 파싱된 응답을 반환한다.
   ///
@@ -30,11 +33,16 @@ class ApiClient {
     Duration? timeout,
   }) async {
     final uri = Uri.parse('${_config.apiBaseUrl}$path');
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    final extra = _extraHeaders?.call();
+    if (extra != null) {
+      headers.addAll(extra);
+    }
     try {
       final response = await _httpClient
           .post(
             uri,
-            headers: {'Content-Type': 'application/json'},
+            headers: headers,
             body: jsonEncode(body),
           )
           .timeout(timeout ?? _config.defaultTimeout);

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_background/flutter_background.dart';
+import 'package:gains_and_guide/core/auth/auth_session.dart';
 import 'package:gains_and_guide/core/bootstrap/database_bootstrap.dart';
+import 'package:gains_and_guide/core/config/app_config.dart';
 import 'package:gains_and_guide/core/database/database_helper.dart';
 import 'package:gains_and_guide/core/theme/app_theme.dart';
 import 'package:gains_and_guide/features/home/presentation/body_profile_screen.dart';
@@ -14,6 +16,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await DatabaseBootstrap.run(DatabaseHelper.instance);
+
+  final appConfig = AppConfig.fromEnvironment();
+  await AuthSession.instance.initialize(appConfig);
 
   final androidConfig = FlutterBackgroundAndroidConfig(
     notificationTitle: "Gains & Guide",

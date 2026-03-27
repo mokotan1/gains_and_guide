@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../auth/anonymous_user_identity.dart';
+import '../auth/auth_session.dart';
+import '../auth/token_user_identity.dart';
 import '../auth/user_identity.dart';
 import '../config/app_config.dart';
 import '../database/database_helper.dart';
@@ -29,11 +30,14 @@ final appConfigProvider = Provider<AppConfig>(
 );
 
 final userIdentityProvider = Provider<UserIdentity>(
-  (_) => const AnonymousUserIdentity(),
+  (_) => TokenUserIdentity(AuthSession.instance.subject),
 );
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  final client = ApiClient(ref.watch(appConfigProvider));
+  final client = ApiClient(
+    ref.watch(appConfigProvider),
+    extraHeaders: () => AuthSession.instance.authorizationHeader ?? {},
+  );
   ref.onDispose(client.dispose);
   return client;
 });
