@@ -1,0 +1,5 @@
+{"id":"spec-epley-1","namespace":"corpus","source":"internal_spec","topic":"strength","license":"proprietary","text":"예상 1RM(Epley)은 weight_kg × (1 + reps ÷ 30)으로 계산한다. 앱 주간 리포트의 ReportConstants.epleyDivisor(30)와 동일하다. 이 공식은 1~15회 정도의 반복 구간에서 흔히 쓰인다."}
+{"id":"coaching-progressive-1","namespace":"corpus","source":"coaching_memo","topic":"programming","license":"proprietary","text":"점진적 과부하: 동일 루틴에서 매 세션 또는 매 주 소량의 중량·반복·세트 볼륨을 늘린다. 급격한 증량은 관절·힘줄 부담과 실패율 상승으로 이어질 수 있다."}
+{"id":"safety-rpe-1","namespace":"corpus","source":"coaching_memo","topic":"safety","license":"proprietary","text":"RPE 9~10을 매 세션 반복하면 회복이 따라오지 않을 수 있다. 고강도 세트는 주간 분산하고 수면·영양·델로드를 계획한다."}
+{"id":"anatomy-lats-1","namespace":"corpus","source":"topic_map","topic":"anatomy","license":"proprietary","text":"한국어 '등' 운동 요청은 카탈로그에서 lats, middle back, lower back 부위 운동과 매칭한다."}
+{"id":"anatomy-legs-1","namespace":"corpus","source":"topic_map","topic":"anatomy","license":"proprietary","text":"한국어 '하체'는 quadriceps, hamstrings, glutes, calves 등 하지 군운동과 연결해 추천한다."}
