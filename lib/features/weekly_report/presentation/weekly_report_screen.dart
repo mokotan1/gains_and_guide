@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/workout_provider.dart';
+import '../../routine/domain/exercise.dart';
 import '../application/weekly_report_service.dart';
 import '../domain/models/weekly_report.dart';
 import 'widgets/action_items_card.dart';
 import 'widgets/headline_card.dart';
 import 'widgets/performance_card.dart';
+import 'widgets/routine_recommendation_card.dart';
 import 'widgets/warning_card.dart';
 
 class WeeklyReportScreen extends ConsumerStatefulWidget {
@@ -22,6 +25,7 @@ class _WeeklyReportScreenState extends ConsumerState<WeeklyReportScreen> {
   bool _loading = true;
   String? _error;
   bool _aiLoading = false;
+  bool _routineLoading = false;
 
   @override
   void initState() {
@@ -89,6 +93,58 @@ class _WeeklyReportScreenState extends ConsumerState<WeeklyReportScreen> {
         const SnackBar(content: Text('AI 분석에 실패했습니다.')),
       );
     }
+  }
+
+  Future<void> _getRoutineRecommendation() async {
+    if (_report == null || _routineLoading) return;
+    setState(() => _routineLoading = true);
+    try {
+      final service = ref.read(weeklyReportServiceProvider);
+      final enriched =
+          await service.enrichWithRoutineRecommendation(_report!);
+      if (!mounted) return;
+      setState(() {
+        _report = enriched;
+        _routineLoading = false;
+      });
+      if (enriched.recommendedRoutine == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('루틴 추천에 실패했습니다. 다시 시도해 주세요.')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _routineLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('루틴 추천에 실패했습니다.')),
+      );
+    }
+  }
+
+  void _applyRecommendedRoutine() {
+    final routine = _report?.recommendedRoutine;
+    if (routine == null || routine.exercises.isEmpty) return;
+
+    final newExercises = routine.exercises.asMap().entries.map((entry) {
+      final i = entry.key;
+      final ex = entry.value;
+      return Exercise.initial(
+        id: '${DateTime.now().millisecondsSinceEpoch}_$i',
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        weight: ex.weight,
+      );
+    }).toList();
+
+    ref.read(workoutProvider.notifier).replaceRecommendedExercises(newExercises);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('추천 루틴이 적용되었습니다!'),
+        backgroundColor: Color(0xFF2563EB),
+      ),
+    );
   }
 
   @override
@@ -175,6 +231,33 @@ class _WeeklyReportScreenState extends ConsumerState<WeeklyReportScreen> {
           PerformanceCard(insights: report.performances),
           WarningCard(warnings: report.warnings),
           ActionItemsCard(items: report.actionItems),
+
+          // 추천 루틴 카드
+          if (report.recommendedRoutine != null &&
+              report.recommendedRoutine!.exercises.isNotEmpty)
+            RoutineRecommendationCard(
+              routine: report.recommendedRoutine!,
+              onApply: _applyRecommendedRoutine,
+            ),
+
+          // 루틴 추천 버튼
+          if (report.recommendedRoutine == null &&
+              report.metrics.totalSessions > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: OutlinedButton.icon(
+                onPressed: _routineLoading ? null : _getRoutineRecommendation,
+                icon: _routineLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.fitness_center_rounded),
+                label: Text(
+                    _routineLoading ? '루틴 생성 중...' : '다음 주 루틴 추천 받기'),
+              ),
+            ),
 
           // AI 코멘트
           if (report.aiComment != null && report.aiComment!.isNotEmpty)

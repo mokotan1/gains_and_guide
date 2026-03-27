@@ -15,9 +15,6 @@ import '../domain/repositories/exercise_catalog_repository.dart';
 import '../domain/repositories/favorite_exercise_repository.dart';
 import '../domain/repositories/progression_repository.dart';
 import '../domain/repositories/workout_history_repository.dart';
-import '../../features/ai_coach/data/coaching_knowledge_repository_impl.dart';
-import '../../features/ai_coach/domain/repositories/coaching_knowledge_repository.dart';
-import '../../features/ai_coach/application/ai_coach_service.dart';
 import '../../features/weekly_report/data/weekly_report_repository_impl.dart';
 import '../../features/weekly_report/domain/repositories/weekly_report_repository.dart';
 
@@ -41,14 +38,6 @@ final exerciseCatalogRepositoryProvider = Provider<ExerciseCatalogRepository>((r
 
 final deloadRepositoryProvider = Provider<DeloadRepository>((ref) {
   return DeloadRepositoryImpl(ref.watch(_dbProvider));
-});
-
-final coachingKnowledgeRepositoryProvider = Provider<CoachingKnowledgeRepository>((ref) {
-  return CoachingKnowledgeRepositoryImpl();
-});
-
-final aiCoachServiceProvider = Provider<AiCoachService>((ref) {
-  return AiCoachService(ref.watch(coachingKnowledgeRepositoryProvider));
 });
 
 final weeklyReportRepositoryProvider = Provider<WeeklyReportRepository>((ref) {

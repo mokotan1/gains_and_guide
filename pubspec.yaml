@@ -1,5 +1,5 @@
 name: gains_and_guide
-description: A new Flutter project for weight training routine management and AI coaching.
+description: A new Flutter project for weight training routine management and weekly report.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -47,4 +47,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/data/exercises.json
-    - assets/data/ai_coach_training.json

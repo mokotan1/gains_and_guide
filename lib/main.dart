@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_background/flutter_background.dart';
 import 'package:gains_and_guide/core/bootstrap/database_bootstrap.dart';
 import 'package:gains_and_guide/core/database/database_helper.dart';
-import 'package:gains_and_guide/features/ai_coach/presentation/ai_coach_screen.dart';
 import 'package:gains_and_guide/features/home/presentation/body_profile_screen.dart';
 import 'package:gains_and_guide/features/home/presentation/home_screen.dart';
 import 'package:gains_and_guide/features/routine/presentation/program_selection_screen.dart';
@@ -70,7 +69,6 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const ProgramSelectionScreen(),
-    const AICoachScreen(),
     const BodyProfileScreen(),
   ];
 
@@ -91,7 +89,6 @@ class _MainScreenState extends State<MainScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
           BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: '루틴'),
-          BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI 코치'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: '프로필'),
         ],
       ),

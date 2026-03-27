@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'recommended_routine.dart';
 import 'report_section.dart';
 import 'weekly_metrics.dart';
 
@@ -17,6 +18,10 @@ class WeeklyReport {
 
   /// AI 서버에서 받은 자연어 보강 코멘트 (optional)
   final String? aiComment;
+
+  /// AI가 주간 분석을 바탕으로 추천한 다음 주 루틴 (optional)
+  final RecommendedRoutine? recommendedRoutine;
+
   final DateTime generatedAt;
 
   const WeeklyReport({
@@ -28,10 +33,14 @@ class WeeklyReport {
     required this.actionItems,
     required this.metrics,
     this.aiComment,
+    this.recommendedRoutine,
     required this.generatedAt,
   });
 
-  WeeklyReport copyWith({String? aiComment}) {
+  WeeklyReport copyWith({
+    String? aiComment,
+    RecommendedRoutine? recommendedRoutine,
+  }) {
     return WeeklyReport(
       weekStart: weekStart,
       weekEnd: weekEnd,
@@ -41,6 +50,7 @@ class WeeklyReport {
       actionItems: actionItems,
       metrics: metrics,
       aiComment: aiComment ?? this.aiComment,
+      recommendedRoutine: recommendedRoutine ?? this.recommendedRoutine,
       generatedAt: generatedAt,
     );
   }
@@ -55,6 +65,7 @@ class WeeklyReport {
       'warnings': warnings.map((w) => w.toJson()).toList(),
       'actionItems': actionItems.map((a) => a.toJson()).toList(),
       'aiComment': aiComment,
+      'recommendedRoutine': recommendedRoutine?.toJson(),
       'generatedAt': generatedAt.toIso8601String(),
       'totalVolume': metrics.totalVolume,
       'avgRpe': metrics.avgRpe,
@@ -123,6 +134,10 @@ class WeeklyReport {
           .toList(),
       metrics: metrics,
       aiComment: map['aiComment'] as String?,
+      recommendedRoutine: map['recommendedRoutine'] != null
+          ? RecommendedRoutine.fromJson(
+              map['recommendedRoutine'] as Map<String, dynamic>)
+          : null,
       generatedAt: DateTime.parse(map['generatedAt'] as String),
     );
   }

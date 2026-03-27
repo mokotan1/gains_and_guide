@@ -12,6 +12,7 @@ import '../domain/models/weekly_report.dart';
 import '../domain/repositories/weekly_report_repository.dart';
 import '../domain/weekly_metrics_calculator.dart';
 import '../domain/weekly_report_generator.dart';
+import 'routine_recommendation_service.dart';
 
 /// 주간 레포트 오케스트레이터.
 ///
@@ -21,11 +22,13 @@ class WeeklyReportService {
   final WorkoutHistoryRepository _historyRepo;
   final ExerciseCatalogRepository _catalogRepo;
   final WeeklyReportRepository _reportRepo;
+  final RoutineRecommendationService _routineRecommendationService;
 
   WeeklyReportService(
     this._historyRepo,
     this._catalogRepo,
     this._reportRepo,
+    this._routineRecommendationService,
   );
 
   /// 지정 주의 레포트를 생성(또는 캐시에서 반환)한다.
@@ -84,6 +87,23 @@ class WeeklyReportService {
       }
     } catch (_) {
       // AI 보강 실패 시 원본 반환 (graceful degradation)
+    }
+    return report;
+  }
+
+  /// 주간 분석 데이터를 기반으로 AI에게 다음 주 루틴 추천을 요청하여 병합한다.
+  Future<WeeklyReport> enrichWithRoutineRecommendation(
+    WeeklyReport report,
+  ) async {
+    try {
+      final routine = await _routineRecommendationService.recommend(report);
+      if (routine != null && routine.exercises.isNotEmpty) {
+        final enriched = report.copyWith(recommendedRoutine: routine);
+        await _reportRepo.saveReport(enriched);
+        return enriched;
+      }
+    } catch (_) {
+      // 루틴 추천 실패 시 원본 반환 (graceful degradation)
     }
     return report;
   }
@@ -191,10 +211,18 @@ class WeeklyReportService {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
 
+final routineRecommendationServiceProvider =
+    Provider<RoutineRecommendationService>((ref) {
+  return RoutineRecommendationService(
+    ref.watch(exerciseCatalogRepositoryProvider),
+  );
+});
+
 final weeklyReportServiceProvider = Provider<WeeklyReportService>((ref) {
   return WeeklyReportService(
     ref.watch(workoutHistoryRepositoryProvider),
     ref.watch(exerciseCatalogRepositoryProvider),
     ref.watch(weeklyReportRepositoryProvider),
+    ref.watch(routineRecommendationServiceProvider),
   );
 });

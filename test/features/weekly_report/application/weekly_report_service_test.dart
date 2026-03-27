@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gains_and_guide/core/domain/repositories/exercise_catalog_repository.dart';
 import 'package:gains_and_guide/core/domain/repositories/workout_history_repository.dart';
 import 'package:gains_and_guide/features/routine/domain/exercise_catalog.dart';
+import 'package:gains_and_guide/features/weekly_report/application/routine_recommendation_service.dart';
 import 'package:gains_and_guide/features/weekly_report/application/weekly_report_service.dart';
 import 'package:gains_and_guide/features/weekly_report/domain/models/weekly_report.dart';
 import 'package:gains_and_guide/features/weekly_report/domain/repositories/weekly_report_repository.dart';
@@ -97,6 +98,7 @@ void main() {
   late FakeWorkoutHistoryRepository historyRepo;
   late FakeExerciseCatalogRepository catalogRepo;
   late FakeWeeklyReportRepository reportRepo;
+  late RoutineRecommendationService routineRecService;
   late WeeklyReportService service;
 
   final monday = DateTime(2026, 3, 23);
@@ -105,7 +107,12 @@ void main() {
     historyRepo = FakeWorkoutHistoryRepository();
     catalogRepo = FakeExerciseCatalogRepository();
     reportRepo = FakeWeeklyReportRepository();
-    service = WeeklyReportService(historyRepo, catalogRepo, reportRepo);
+    routineRecService = RoutineRecommendationService(
+      catalogRepo,
+      baseUrl: 'http://localhost:0',
+    );
+    service = WeeklyReportService(
+        historyRepo, catalogRepo, reportRepo, routineRecService);
   });
 
   Map<String, dynamic> _row({
@@ -207,7 +214,8 @@ void main() {
         ..rows = historyRepo.rows;
       final lowChronicRepo = _LowChronicHistoryRepo(historyRepo);
 
-      service = WeeklyReportService(lowChronicRepo, catalogRepo, reportRepo);
+      service = WeeklyReportService(
+          lowChronicRepo, catalogRepo, reportRepo, routineRecService);
       final report = await service.getOrGenerateReport(weekStart: monday);
 
       expect(report.warnings, isNotEmpty);

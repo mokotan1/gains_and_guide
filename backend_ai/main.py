@@ -28,6 +28,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 persona_path = os.path.join(current_dir, "persona.txt")
 exercises_json_path = os.path.join(current_dir, "exercises.json")
 
+routine_persona_path = os.path.join(current_dir, "routine_persona.txt")
+
 try:
     with open(persona_path, "r", encoding="utf-8") as f:
         SYSTEM_PROMPT = f.read()
@@ -35,6 +37,14 @@ try:
 except FileNotFoundError:
     SYSTEM_PROMPT = "당신은 전문 헬스 트레이너입니다."
     logger.warning("⚠️ persona.txt를 찾지 못해 기본 페르소나를 사용합니다.")
+
+try:
+    with open(routine_persona_path, "r", encoding="utf-8") as f:
+        ROUTINE_SYSTEM_PROMPT = f.read()
+    logger.info("✅ 루틴 추천 페르소나 파일을 성공적으로 읽었습니다.")
+except FileNotFoundError:
+    ROUTINE_SYSTEM_PROMPT = "당신은 주간 운동 데이터 분석 전문가이자 루틴 설계 코치입니다."
+    logger.warning("⚠️ routine_persona.txt를 찾지 못해 기본 페르소나를 사용합니다.")
 
 # 운동 카탈로그 로드 및 텍스트화
 exercise_catalog_text = ""
@@ -79,6 +89,10 @@ class ChatRequest(BaseModel):
     user_id: str
     message: str
     context: str = ""
+
+class RecommendRequest(BaseModel):
+    user_id: str
+    weekly_summary: str
 
 @app.get("/")
 def read_root():
@@ -134,6 +148,59 @@ async def chat_with_coach(request: ChatRequest):
 
     except Exception as e:
         logger.exception("❌ 답변 생성 중 오류 발생:")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/recommend")
+async def recommend_routine(request: RecommendRequest):
+    if not client:
+        raise HTTPException(status_code=500, detail="서버에 Groq API 키가 없습니다.")
+
+    try:
+        full_system_prompt = ROUTINE_SYSTEM_PROMPT
+        if exercise_catalog_text:
+            korean_mapping_guide = (
+                "\n\n[부위 매칭 참고 가이드]\n"
+                "- 등: lats, middle back, lower back\n"
+                "- 이두: biceps\n"
+                "- 가슴: chest\n"
+                "- 어깨: shoulders\n"
+                "- 하체: quadriceps, hamstrings, glutes, calves\n"
+                "- 삼두: triceps\n"
+                "- 복근: abs\n"
+            )
+            full_system_prompt += f"{korean_mapping_guide}\n{exercise_catalog_text}"
+
+        messages = [
+            {"role": "system", "content": full_system_prompt},
+            {"role": "user", "content": f"[주간 운동 분석 데이터]\n{request.weekly_summary}\n\n[지시]\n위 분석 데이터를 바탕으로 다음 주 추천 루틴을 JSON으로 생성해주세요."}
+        ]
+
+        chat_completion = client.chat.completions.create(
+            messages=messages,
+            model="llama-3.1-8b-instant",
+            temperature=0.7,
+            max_tokens=1024,
+            response_format={"type": "json_object"}
+        )
+
+        reply = chat_completion.choices[0].message.content
+
+        try:
+            parsed_reply = json.loads(reply)
+            routine = parsed_reply.get("routine")
+
+            if routine is None:
+                return {"routine": {"title": "기본 추천 루틴", "rationale": "분석 데이터 기반 기본 루틴입니다.", "exercises": []}}
+
+            return {"routine": routine}
+        except json.JSONDecodeError:
+            logger.error(f"JSON 파싱 실패: {reply}")
+            raise HTTPException(status_code=500, detail="AI 응답 파싱에 실패했습니다.")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("❌ 루틴 추천 생성 중 오류 발생:")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
