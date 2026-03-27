@@ -27,7 +27,12 @@ class _AICoachScreenState extends ConsumerState<AICoachScreen> {
     setState(() => _isLoading = true);
     _messageController.clear();
 
-    final String contextData = await _buildPersonalizedContext(userMsg);
+    final aiCoachService = ref.read(aiCoachServiceProvider);
+    final String personalizedContext = await _buildPersonalizedContext(userMsg);
+    final String contextData = await aiCoachService.buildEnrichedContext(
+      userMessage: userMsg,
+      personalizedContext: personalizedContext,
+    );
 
     try {
       final response = await http.post(
