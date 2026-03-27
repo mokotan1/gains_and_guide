@@ -131,7 +131,7 @@ class TestRagService(unittest.TestCase):
         old = os.environ.get("RAG_SNIPPET_MAX_CHARS")
         try:
             os.environ["RAG_SNIPPET_MAX_CHARS"] = "not-a-number"
-            self.assertEqual(rag_snippet_max_chars_from_env(), 600)
+            self.assertEqual(rag_snippet_max_chars_from_env(), 450)
         finally:
             if old is None:
                 os.environ.pop("RAG_SNIPPET_MAX_CHARS", None)

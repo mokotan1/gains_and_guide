@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 
 DEFAULT_TOP_K = 5
-_DEFAULT_RAG_SNIPPET_MAX = 600
+_DEFAULT_RAG_SNIPPET_MAX = 450
 _MIN_RAG_SNIPPET = 80
 
 
