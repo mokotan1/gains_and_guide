@@ -31,6 +31,17 @@ class FakeWorkoutHistoryRepository implements WorkoutHistoryRepository {
       int sessionLimit) async {
     return historyRows;
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> getHistoryForDateRange(
+    String startDate,
+    String endDate,
+  ) async =>
+      historyRows;
+
+  @override
+  Future<List<double>> getWeeklyVolumes(int weekCount) async =>
+      List.filled(weekCount, 0);
 }
 
 class FakeProgressionRepository implements ProgressionRepository {
@@ -59,6 +70,7 @@ class FakeDeloadRepository implements DeloadRepository {
   DateTime? lastDeloadEnd;
   bool inDeload = false;
   final List<Map<String, dynamic>> records = [];
+  Map<String, dynamic>? activeRecord;
 
   @override
   Future<DateTime?> getLastDeloadEndDate() async => lastDeloadEnd;
@@ -85,6 +97,9 @@ class FakeDeloadRepository implements DeloadRepository {
 
   @override
   Future<void> decrementDeloadSession() async {}
+
+  @override
+  Future<Map<String, dynamic>?> getActiveDeloadRecord() async => activeRecord;
 }
 
 // =============================================================================
@@ -255,6 +270,82 @@ void main() {
       );
       expect(deloadRepo.records.length, 1);
       expect(deloadRepo.records.first['fatigueScore'], 75);
+    });
+
+    test('이미 디로드 진행 중이면 중복 레코드를 삽입하지 않음', () async {
+      deloadRepo.inDeload = true;
+      await service.recordDeload(
+        const DeloadRecommendation(
+          shouldDeload: true,
+          totalScore: 70,
+          signals: [],
+          reductionRatio: 0.6,
+          cycleSessions: 3,
+          summary: 'duplicate attempt',
+        ),
+      );
+      expect(deloadRepo.records, isEmpty);
+    });
+
+    test('디로드 종료 후에는 새 레코드 삽입 가능', () async {
+      deloadRepo.inDeload = false;
+      await service.recordDeload(
+        const DeloadRecommendation(
+          shouldDeload: true,
+          totalScore: 80,
+          signals: [],
+          reductionRatio: 0.6,
+          cycleSessions: 3,
+          summary: 'new cycle',
+        ),
+      );
+      expect(deloadRepo.records.length, 1);
+    });
+  });
+
+  // ===========================================================================
+  group('isCurrentlyInDeload (위임)', () {
+    test('디로드 진행 중이면 true', () async {
+      deloadRepo.inDeload = true;
+      expect(await service.isCurrentlyInDeload(), true);
+    });
+
+    test('디로드 미진행이면 false', () async {
+      deloadRepo.inDeload = false;
+      expect(await service.isCurrentlyInDeload(), false);
+    });
+  });
+
+  // ===========================================================================
+  group('getActiveDeloadRecommendation', () {
+    test('활성 디로드가 없으면 null 반환', () async {
+      deloadRepo.activeRecord = null;
+      final result = await service.getActiveDeloadRecommendation();
+      expect(result, isNull);
+    });
+
+    test('활성 디로드 레코드가 있으면 shouldDeload=true인 Recommendation 반환', () async {
+      deloadRepo.activeRecord = {
+        'fatigue_score': 75.0,
+        'remaining_sessions': 2,
+        'reason': 'test deload',
+      };
+      final result = await service.getActiveDeloadRecommendation();
+      expect(result, isNotNull);
+      expect(result!.shouldDeload, true);
+      expect(result.totalScore, 75.0);
+      expect(result.cycleSessions, 2);
+      expect(result.summary, 'test deload');
+    });
+
+    test('reason이 null이면 빈 문자열로 처리', () async {
+      deloadRepo.activeRecord = {
+        'fatigue_score': 65.0,
+        'remaining_sessions': 1,
+        'reason': null,
+      };
+      final result = await service.getActiveDeloadRecommendation();
+      expect(result!.summary, '');
     });
   });
 }

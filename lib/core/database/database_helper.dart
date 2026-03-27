@@ -17,7 +17,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 7,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -54,6 +54,20 @@ class DatabaseHelper {
     await _createExerciseCatalogTable(db);
     await _createRoutineTables(db);
     await _createDeloadHistoryTable(db);
+    await _createWeeklyReportsTable(db);
+  }
+
+  Future _createWeeklyReportsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS weekly_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_start TEXT NOT NULL,
+        week_end TEXT NOT NULL,
+        report_json TEXT NOT NULL,
+        generated_at TEXT NOT NULL,
+        UNIQUE(week_start)
+      )
+    ''');
   }
 
   Future _createDeloadHistoryTable(Database db) async {
@@ -148,6 +162,9 @@ class DatabaseHelper {
         ALTER TABLE deload_history
         ADD COLUMN remaining_sessions INTEGER NOT NULL DEFAULT 0
       ''');
+    }
+    if (oldVersion < 8) {
+      await _createWeeklyReportsTable(db);
     }
   }
 
@@ -353,5 +370,104 @@ class DatabaseHelper {
       SET remaining_sessions = remaining_sessions - 1
       WHERE remaining_sessions > 0
     ''');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Workout history — date range queries (주간 레포트용)
+  // ---------------------------------------------------------------------------
+
+  /// 날짜 범위 내의 모든 운동 기록 조회
+  Future<List<Map<String, dynamic>>> getHistoryForDateRange(
+    String startDate,
+    String endDate,
+  ) async {
+    final db = await instance.database;
+    return db.rawQuery('''
+      SELECT * FROM workout_history
+      WHERE SUBSTR(date, 1, 10) >= ? AND SUBSTR(date, 1, 10) <= ?
+      ORDER BY date ASC
+    ''', [startDate, endDate]);
+  }
+
+  /// 최근 N주간의 주별 총 볼륨 리스트 반환 (최신순, 이번 주 제외)
+  Future<List<double>> getWeeklyVolumes(int weekCount) async {
+    final db = await instance.database;
+    final now = DateTime.now();
+
+    final results = <double>[];
+    for (int i = 1; i <= weekCount; i++) {
+      final weekEnd = now.subtract(Duration(days: 7 * i - (7 - now.weekday % 7)));
+      final weekStart = weekEnd.subtract(const Duration(days: 6));
+      final startStr = _dateStr(weekStart);
+      final endStr = _dateStr(weekEnd);
+
+      final rows = await db.rawQuery('''
+        SELECT COALESCE(SUM(weight * reps), 0) AS volume
+        FROM workout_history
+        WHERE SUBSTR(date, 1, 10) >= ? AND SUBSTR(date, 1, 10) <= ?
+      ''', [startStr, endStr]);
+
+      final volume = (rows.first['volume'] as num?)?.toDouble() ?? 0;
+      results.add(volume);
+    }
+    return results;
+  }
+
+  static String _dateStr(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  // ---------------------------------------------------------------------------
+  // Weekly reports
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveWeeklyReport({
+    required String weekStart,
+    required String weekEnd,
+    required String reportJson,
+    required String generatedAt,
+  }) async {
+    final db = await instance.database;
+    await db.insert(
+      'weekly_reports',
+      {
+        'week_start': weekStart,
+        'week_end': weekEnd,
+        'report_json': reportJson,
+        'generated_at': generatedAt,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, dynamic>?> getWeeklyReport(String weekStart) async {
+    final db = await instance.database;
+    final res = await db.query(
+      'weekly_reports',
+      where: 'week_start = ?',
+      whereArgs: [weekStart],
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentWeeklyReports(int limit) async {
+    final db = await instance.database;
+    return db.query(
+      'weekly_reports',
+      orderBy: 'week_start DESC',
+      limit: limit,
+    );
+  }
+
+  /// remaining_sessions > 0인 활성 디로드 레코드 반환 (없으면 null)
+  Future<Map<String, dynamic>?> getActiveDeloadRecord() async {
+    final db = await instance.database;
+    final res = await db.query(
+      'deload_history',
+      where: 'remaining_sessions > 0',
+      orderBy: 'id DESC',
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first : null;
   }
 }

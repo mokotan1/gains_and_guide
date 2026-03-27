@@ -12,6 +12,8 @@ import '../../../core/workout_provider.dart';
 import '../../deload/presentation/deload_banner_widget.dart';
 import '../../deload/presentation/deload_prediction_card.dart';
 import '../../routine/domain/exercise.dart';
+import '../../weekly_report/application/weekly_report_service.dart';
+import '../../weekly_report/presentation/weekly_report_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -24,12 +26,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Timer? _restTimer;
   int _remainingSeconds = 0;
   int _selectedRestTime = 180;
+  bool _weeklyReportReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkWeeklyReport();
+  }
 
   @override
   void dispose() {
     _cardioTimer?.cancel();
     _restTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _checkWeeklyReport() async {
+    try {
+      final service = ref.read(weeklyReportServiceProvider);
+      final now = DateTime.now();
+      if (now.weekday >= DateTime.monday) {
+        final lastMonday = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - 1 + 7));
+        final hasReport = await service.getOrGenerateReport(weekStart: lastMonday);
+        if (!mounted) return;
+        if (hasReport.metrics.totalSessions > 0) {
+          setState(() => _weeklyReportReady = true);
+        }
+      }
+    } catch (_) {
+      // 자동 생성 실패 시 조용히 무시
+    }
   }
 
   bool _checkIsCardio(String name) =>
@@ -761,6 +788,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text('Gains & Guide'),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const WeeklyReportScreen()),
+            ),
+            icon: const Icon(Icons.bar_chart_rounded),
+            tooltip: '주간 레포트',
+          ),
           if (!isFinished) ...[
             IconButton(onPressed: _showCardioSelectionDialog, icon: const Icon(Icons.directions_run, color: AppTheme.warningOrange)),
             IconButton(onPressed: _showAddExerciseDialog, icon: const Icon(Icons.add_circle, color: AppTheme.primaryBlue)),
@@ -771,6 +806,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            if (_weeklyReportReady) _buildWeeklyReportBanner(),
             if (deloadRec != null && deloadRec.shouldDeload)
               DeloadBannerWidget(recommendation: deloadRec)
             else if (deloadRec != null)
@@ -928,7 +964,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ? '목표 시간: ${setRep}분'
         : '${setWeight.toStringAsFixed(1)}kg × ${setRep}회';
 
-    return ListTile(
+    final canDelete = !isFinished && ex.sets > 1;
+
+    final tile = ListTile(
       dense: true,
       leading: CircleAvatar(
         radius: 14,
@@ -973,6 +1011,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         onChanged: isFinished ? null : (v) => _toggleSetStatus(exIdx, sIdx, ref.read(workoutProvider)),
       ),
     );
+
+    if (!canDelete) return tile;
+
+    return Dismissible(
+      key: ValueKey('${ex.id}_set_$sIdx'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red.shade400,
+        child: const Icon(Icons.delete_outline, color: Colors.white),
+      ),
+      onDismissed: (_) {
+        ref.read(workoutProvider.notifier).removeSetFromExercise(exIdx, sIdx);
+      },
+      child: tile,
+    );
   }
 
   Widget _buildExerciseList(List<Exercise> exercises, bool isFinished) {
@@ -1008,7 +1063,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: ex.failedSetCount > 0 ? Colors.red.shade400 : Colors.black54,
                 ),
               ),
-              children: List.generate(ex.sets, (sIdx) => _buildSetRow(ex, idx, sIdx, isFinished)),
+              children: [
+                ...List.generate(ex.sets, (sIdx) => _buildSetRow(ex, idx, sIdx, isFinished)),
+                if (!isFinished)
+                  ListTile(
+                    dense: true,
+                    leading: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: Colors.grey[200],
+                      child: Icon(Icons.add, size: 16, color: Colors.grey[500]),
+                    ),
+                    title: Text('세트 추가', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                    onTap: () => ref.read(workoutProvider.notifier).addSetToExercise(idx),
+                  ),
+              ],
             ),
           );
         },
@@ -1063,6 +1131,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Text(
         '남은 세트를 모두 완료하면 정산 버튼이 나타납니다. ($comp/$tot)',
         style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildWeeklyReportBanner() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const WeeklyReportScreen()),
+        );
+        setState(() => _weeklyReportReady = false);
+      },
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.primaryBlue.withValues(alpha: 0.1),
+              AppTheme.primaryBlue.withValues(alpha: 0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.bar_chart_rounded, color: AppTheme.primaryBlue, size: 28),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '지난 주 레포트가 준비되었습니다',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    '탭하여 퍼포먼스 리뷰를 확인하세요',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.primaryBlue),
+          ],
+        ),
       ),
     );
   }
