@@ -392,7 +392,8 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     if (historyData.isNotEmpty) {
       await _service.saveWorkoutHistory(historyData);
 
-      if (deloadRecommendation?.shouldDeload ?? false) {
+      // DB에 활성 디로드가 있으면 반드시 차감 (notifier 플래그와 불일치해도 동작)
+      if (await _deloadService.isCurrentlyInDeload()) {
         await _deloadService.completeDeloadSession();
         final activeRec = await _deloadService.getActiveDeloadRecommendation();
         deloadRecommendation = activeRec ??

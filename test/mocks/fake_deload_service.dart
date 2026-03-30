@@ -26,8 +26,7 @@ class FakeDeloadService extends DeloadService {
 
   @override
   Future<bool> isCurrentlyInDeload() async =>
-      simulatedRemainingSessions > 0 &&
-      (activeRecommendation?.shouldDeload ?? false);
+      simulatedRemainingSessions > 0;
 
   @override
   Future<DeloadRecommendation?> getActiveDeloadRecommendation() async {

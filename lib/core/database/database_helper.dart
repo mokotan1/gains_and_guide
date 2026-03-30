@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 11,
+      version: 12,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -237,6 +237,22 @@ class DatabaseHelper {
     }
     if (oldVersion < 11) {
       await _createUserProfileTable(db);
+    }
+    if (oldVersion < 12) {
+      // remaining_sessions > 0 인 행이 여러 개면 최신 id 하나만 남기고 나머지는 종료 처리
+      await db.rawUpdate('''
+        UPDATE deload_history
+        SET remaining_sessions = 0
+        WHERE remaining_sessions > 0
+          AND id NOT IN (
+            SELECT id FROM (
+              SELECT id FROM deload_history
+              WHERE remaining_sessions > 0
+              ORDER BY id DESC
+              LIMIT 1
+            )
+          )
+      ''');
     }
   }
 

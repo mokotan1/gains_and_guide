@@ -194,6 +194,30 @@ void main() {
       );
     });
 
+    test('DB에만 활성 디로드가 있을 때(notifier 플래그 불일치)에도 세션 차감됨', () async {
+      fakeDeload.simulatedRemainingSessions = 1;
+      fakeDeload.activeRecommendation = const DeloadRecommendation(
+        shouldDeload: true,
+        totalScore: 65,
+        signals: [],
+        reductionRatio: 0.6,
+        cycleSessions: 1,
+        summary: 'test',
+      );
+      notifier.deloadRecommendation = const DeloadRecommendation.none();
+
+      final ex = _buildExercise(
+        setRpe: [1, 1, 1],
+        setStatus: [true, true, true],
+      );
+      notifier.state = [ex];
+
+      await notifier.saveCurrentWorkoutToHistory();
+
+      expect(fakeDeload.simulatedRemainingSessions, 0);
+      expect(fakeDeload.deloadSessionCompleted, true);
+    });
+
     test('디로드 마지막 세션 저장 후 deloadRecommendation 이 종료 상태로 갱신됨', () async {
       fakeDeload.simulatedRemainingSessions = 1;
       fakeDeload.activeRecommendation = const DeloadRecommendation(
