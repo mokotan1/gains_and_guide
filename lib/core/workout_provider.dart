@@ -32,11 +32,49 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
       if (session != null) {
         state = session;
         isFinished = await _service.getIsFinished();
+        // 같은 날 세션은 SharedPreferences 에 캐시되므로, DB 프로그레션/디로드만
+        // 고친 경우에도 여기서 무게를 다시 맞춘다.
+        await _reconcileSessionWeightsWithProgression();
         await _refreshFatigueScore();
       } else {
         await updateRoutineByDay();
       }
     }
+  }
+
+  /// 오늘 저장된 세션 복원 시: SQLite 프로그레션과 활성 디로드(DB) 기준으로
+  /// 무게만 갱신하고, 세트 완료·RPE·실패·횟수는 유지한다.
+  Future<void> _reconcileSessionWeightsWithProgression() async {
+    if (state.isEmpty) return;
+
+    final activeRec = await _deloadService.getActiveDeloadRecommendation();
+    final updated = <Exercise>[];
+
+    for (final ex in state) {
+      if (ex.isCardio || ex.isBodyweight) {
+        updated.add(ex);
+        continue;
+      }
+
+      final baseW = await _service.getLatestWeight(ex.name) ?? ex.weight;
+      final withBase = ex.copyWith(
+        weight: baseW,
+        setWeights: List.filled(ex.sets, baseW),
+      );
+      final weighted = activeRec != null
+          ? _deloadService.applyDeload([withBase], activeRec).first
+          : withBase;
+
+      updated.add(weighted.copyWith(
+        setStatus: ex.setStatus,
+        setRpe: ex.setRpe,
+        setFailed: ex.setFailed,
+        setReps: ex.setReps,
+      ));
+    }
+
+    state = updated;
+    await _saveCurrentSession();
   }
 
   /// 앱 재시작 시 피로도를 재평가하되, 진행 중인 디로드 상태는 보존
