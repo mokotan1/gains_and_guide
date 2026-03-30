@@ -21,13 +21,14 @@ DEFAULT_MODEL = groq_model_name()
 
 _JSON_FINAL_INSTRUCTION = (
     "도구가 더 필요 없으면, 최종 메시지는 오직 하나의 JSON 객체만 포함해야 한다. "
-    '키: "response" (문자열), "routine" (객체 또는 null). '
+    '키: "response" (문자열), "routine" (객체 또는 null), "progression" (배열 또는 null). '
     "마크다운 코드펜스나 추가 설명 없이 JSON만 출력한다."
 )
 
 COACH_SCHEMA_RETRY_USER_SUFFIX = (
     "\n\n[형식 복구]\n"
-    "직전 최종 출력이 {\"response\": string, \"routine\": object|null} 규칙을 어겼다. "
+    "직전 최종 출력이 "
+    '{"response": string, "routine": object|null, "progression": array|null} 규칙을 어겼다. '
     "도구 호출이 끝났다면 같은 키만 가진 JSON 한 객체만 다시 출력하라."
 )
 
@@ -81,10 +82,12 @@ def _parse_coach_json(content: str) -> dict[str, Any]:
     try:
         data = json.loads(s)
         if isinstance(data, dict):
-            return data
+            merged = dict(data)
+            merged.setdefault("progression", None)
+            return merged
     except json.JSONDecodeError:
         pass
-    return {"response": content, "routine": None}
+    return {"response": content, "routine": None, "progression": None}
 
 
 def run_coach_agent(
@@ -107,7 +110,11 @@ def run_coach_agent(
     out_messages: List[BaseMessage] = list(result.get("messages", []))
     _audit_tool_calls(out_messages)
     if not out_messages:
-        return {"response": "응답을 생성하지 못했습니다.", "routine": None}
+        return {
+            "response": "응답을 생성하지 못했습니다.",
+            "routine": None,
+            "progression": None,
+        }
     last = out_messages[-1]
     if isinstance(last, AIMessage):
         content = last.content
@@ -120,4 +127,4 @@ def run_coach_agent(
             )
             return _parse_coach_json(text)
         return _parse_coach_json(str(content))
-    return {"response": str(last), "routine": None}
+    return {"response": str(last), "routine": None, "progression": None}
