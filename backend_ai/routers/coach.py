@@ -75,7 +75,9 @@ _EMERGENCY_CONTEXT_MAX_CHARS = 800
 _EMERGENCY_MAX_COMPLETION_TOKENS = 384
 
 _CHAT_EMERGENCY_JSON_SUFFIX = (
-    "\n\n[출력]\n오직 JSON 한 객체: {\"response\": string, \"routine\": object|null}. "
+    "\n\n[출력]\n오직 JSON 한 객체: {\"response\": string, \"routine\": object|null, "
+    "\"progression\": array|null}. "
+    "progression 원소는 {\"name\": string, \"increase\": number}; 증량 제안이 없으면 null. "
     "routine이 있으면 exercises[].name은 가능한 한 영문 운동명을 사용한다.\n"
 )
 
@@ -329,7 +331,7 @@ def _legacy_chat_completion(
     )
     reply = chat_completion.choices[0].message.content
     if not reply:
-        return {"response": "빈 응답", "routine": None}
+        return {"response": "빈 응답", "routine": None, "progression": None}
     try:
         parsed_reply = json.loads(reply)
         text_response = (
@@ -342,13 +344,20 @@ def _legacy_chat_completion(
             "routine": catalog.localize_routine_exercise_names(
                 parsed_reply.get("routine")
             ),
+            "progression": parsed_reply.get("progression"),
         }
     except json.JSONDecodeError:
-        return {"response": reply, "routine": None}
+        return {"response": reply, "routine": None, "progression": None}
 
 
 def _coerce_chat_response(raw: dict[str, Any]) -> CoachChatResponse:
     return coerce_raw_coach_dict(raw)
+
+
+def _progression_for_json(v: CoachChatResponse) -> list[dict[str, Any]] | None:
+    if v.progression is None:
+        return None
+    return [item.model_dump() for item in v.progression]
 
 
 async def _run_agent_with_timeout(
@@ -435,10 +444,12 @@ async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]
                 v = CoachChatResponse(
                     response=str(raw.get("response", "응답을 처리하지 못했습니다.")),
                     routine=None,
+                    progression=None,
                 )
             return {
                 "response": v.response,
                 "routine": catalog.localize_routine_exercise_names(v.routine),
+                "progression": _progression_for_json(v),
             }
         except HTTPException:
             raise
@@ -494,10 +505,12 @@ async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]
                         )
                         or "답변 형식을 확인하지 못했습니다.",
                         routine=None,
+                        progression=None,
                     )
         return {
             "response": v.response,
             "routine": catalog.localize_routine_exercise_names(v.routine),
+            "progression": _progression_for_json(v),
         }
     except asyncio.TimeoutError:
         logger.error("coach agent timeout after %ss", _coach_timeout_sec())
@@ -520,10 +533,12 @@ async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]
                 v = CoachChatResponse(
                     response=str(raw.get("response", "응답을 처리하지 못했습니다.")),
                     routine=None,
+                    progression=None,
                 )
             return {
                 "response": v.response,
                 "routine": catalog.localize_routine_exercise_names(v.routine),
+                "progression": _progression_for_json(v),
             }
         except HTTPException:
             raise
