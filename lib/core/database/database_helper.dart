@@ -586,12 +586,20 @@ class DatabaseHelper {
   }
 
   /// 디로드 세션 1회 차감. 0이 되면 디로드 종료.
+  /// 가장 최근 활성 행(id 내림차순)만 차감해 중복 행이 있어도 일괄 감소하지 않는다.
   Future<void> decrementDeloadSession() async {
     final db = await instance.database;
     await db.rawUpdate('''
       UPDATE deload_history
       SET remaining_sessions = remaining_sessions - 1
-      WHERE remaining_sessions > 0
+      WHERE id = (
+        SELECT id FROM (
+          SELECT id FROM deload_history
+          WHERE remaining_sessions > 0
+          ORDER BY id DESC
+          LIMIT 1
+        )
+      )
     ''');
   }
 

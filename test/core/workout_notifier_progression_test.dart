@@ -109,6 +109,7 @@ void main() {
     });
 
     test('디로드 진행 중에는 증량 스킵', () async {
+      fakeDeload.simulatedRemainingSessions = 3;
       fakeDeload.activeRecommendation = const DeloadRecommendation(
         shouldDeload: true,
         totalScore: 80,
@@ -191,6 +192,32 @@ void main() {
         fakeService.savedProgressions['플랫 벤치 프레스'],
         90.0 + WorkoutConstants.weightIncrementFull,
       );
+    });
+
+    test('디로드 마지막 세션 저장 후 deloadRecommendation 이 종료 상태로 갱신됨', () async {
+      fakeDeload.simulatedRemainingSessions = 1;
+      fakeDeload.activeRecommendation = const DeloadRecommendation(
+        shouldDeload: true,
+        totalScore: 80,
+        signals: [],
+        reductionRatio: 0.6,
+        cycleSessions: 1,
+        summary: '마지막 디로드',
+      );
+      fakeDeload.nextEvaluationResult = const DeloadRecommendation.none();
+      notifier.deloadRecommendation = fakeDeload.activeRecommendation;
+
+      final ex = _buildExercise(
+        setRpe: [1, 1, 1],
+        setStatus: [true, true, true],
+      );
+      notifier.state = [ex];
+
+      await notifier.saveCurrentWorkoutToHistory();
+
+      expect(notifier.deloadRecommendation?.shouldDeload, false);
+      expect(fakeDeload.deloadSessionCompleted, true);
+      expect(fakeDeload.simulatedRemainingSessions, 0);
     });
   });
 }

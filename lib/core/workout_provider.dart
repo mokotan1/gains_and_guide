@@ -394,6 +394,10 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
       if (deloadRecommendation?.shouldDeload ?? false) {
         await _deloadService.completeDeloadSession();
+        final activeRec = await _deloadService.getActiveDeloadRecommendation();
+        deloadRecommendation = activeRec ??
+            await _deloadService.evaluateDeloadNeed(state);
+        state = [...state];
       }
 
       await _service.clearSession();

@@ -13,6 +13,10 @@ class FakeDeloadService extends DeloadService {
   DeloadRecommendation nextEvaluationResult = const DeloadRecommendation.none();
   bool deloadSessionCompleted = false;
 
+  /// DB의 remaining_sessions 와 유사. 0이면 활성 디로드 없음.
+  /// [getActiveDeloadRecommendation] / [isCurrentlyInDeload]에 반영된다.
+  int simulatedRemainingSessions = 0;
+
   FakeDeloadService()
       : super(
           _NoopHistoryRepo(),
@@ -22,11 +26,14 @@ class FakeDeloadService extends DeloadService {
 
   @override
   Future<bool> isCurrentlyInDeload() async =>
-      activeRecommendation?.shouldDeload ?? false;
+      simulatedRemainingSessions > 0 &&
+      (activeRecommendation?.shouldDeload ?? false);
 
   @override
-  Future<DeloadRecommendation?> getActiveDeloadRecommendation() async =>
-      activeRecommendation;
+  Future<DeloadRecommendation?> getActiveDeloadRecommendation() async {
+    if (simulatedRemainingSessions <= 0) return null;
+    return activeRecommendation;
+  }
 
   @override
   Future<DeloadRecommendation> evaluateDeloadNeed(
@@ -56,6 +63,9 @@ class FakeDeloadService extends DeloadService {
   @override
   Future<void> completeDeloadSession() async {
     deloadSessionCompleted = true;
+    if (simulatedRemainingSessions > 0) {
+      simulatedRemainingSessions--;
+    }
   }
 }
 
