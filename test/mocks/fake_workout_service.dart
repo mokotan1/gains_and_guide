@@ -80,7 +80,38 @@ class FakeWorkoutService extends WorkoutService {
 
 class _NoopHistoryRepo implements WorkoutHistoryRepository {
   @override
-  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+  Future<List<Map<String, dynamic>>> getAllHistory() async => [];
+
+  @override
+  Future<void> saveWorkoutHistory(List<Map<String, dynamic>> history) async {}
+
+  @override
+  Future<List<Map<String, dynamic>>> getRecentSessionsByExercise(
+    String exerciseName,
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) async =>
+      [];
+
+  @override
+  Future<List<Map<String, dynamic>>> getRecentSessions(
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) async =>
+      [];
+
+  @override
+  Future<List<String>> getDistinctWorkoutSessionDates() async => [];
+
+  @override
+  Future<List<Map<String, dynamic>>> getHistoryForDateRange(
+    String startDate,
+    String endDate,
+  ) async =>
+      [];
+
+  @override
+  Future<List<double>> getWeeklyVolumes(int weekCount) async => [];
 }
 
 class _NoopProgressionRepo implements ProgressionRepository {

@@ -9,7 +9,7 @@ class DeloadRepositoryImpl implements DeloadRepository {
 
   @override
   Future<DateTime?> getLastDeloadEndDate() async {
-    final record = await _db.getLastDeloadRecord();
+    final record = await _db.getLastCompletedDeloadRecord();
     if (record == null) return null;
     return DateTime.tryParse(record['end_date'] as String);
   }

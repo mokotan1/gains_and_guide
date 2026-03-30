@@ -18,18 +18,51 @@ class FakeWorkoutHistoryRepository implements WorkoutHistoryRepository {
   @override
   Future<void> saveWorkoutHistory(List<Map<String, dynamic>> history) async {}
 
+  static Iterable<Map<String, dynamic>> _filterDeload(
+    Iterable<Map<String, dynamic>> rows,
+    bool excludeDeload,
+  ) {
+    if (!excludeDeload) return rows;
+    return rows.where((r) => (r['is_deload'] as int? ?? 0) == 0);
+  }
+
+  static List<Map<String, dynamic>> _rowsForTopNDates(
+    Iterable<Map<String, dynamic>> rows,
+    int sessionLimit,
+  ) {
+    final list = rows.toList();
+    final byDate = <String, List<Map<String, dynamic>>>{};
+    for (final r in list) {
+      final d = (r['date'] as String).substring(0, 10);
+      byDate.putIfAbsent(d, () => []).add(r);
+    }
+    final sortedDates = byDate.keys.toList()..sort((a, b) => b.compareTo(a));
+    final pick = sortedDates.take(sessionLimit).toSet();
+    return list
+        .where((r) => pick.contains((r['date'] as String).substring(0, 10)))
+        .toList();
+  }
+
   @override
   Future<List<Map<String, dynamic>>> getRecentSessionsByExercise(
     String exerciseName,
-    int sessionLimit,
-  ) async {
-    return historyRows.where((r) => r['name'] == exerciseName).toList();
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) async {
+    final filtered = _filterDeload(
+      historyRows.where((r) => r['name'] == exerciseName),
+      excludeDeload,
+    );
+    return _rowsForTopNDates(filtered, sessionLimit);
   }
 
   @override
   Future<List<Map<String, dynamic>>> getRecentSessions(
-      int sessionLimit) async {
-    return historyRows;
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) async {
+    final filtered = _filterDeload(historyRows, excludeDeload);
+    return _rowsForTopNDates(filtered, sessionLimit);
   }
 
   @override
@@ -38,6 +71,16 @@ class FakeWorkoutHistoryRepository implements WorkoutHistoryRepository {
     String endDate,
   ) async =>
       historyRows;
+
+  @override
+  Future<List<String>> getDistinctWorkoutSessionDates() async {
+    final dates = historyRows
+        .map((r) => (r['date'] as String).substring(0, 10))
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+    return dates;
+  }
 
   @override
   Future<List<double>> getWeeklyVolumes(int weekCount) async =>
@@ -119,6 +162,7 @@ Map<String, dynamic> _historyRow(String name, int rpe, String date) => {
       'weight': 80.0,
       'rpe': rpe,
       'date': date,
+      'is_deload': 0,
     };
 
 void main() {
@@ -190,6 +234,33 @@ void main() {
       final rec = await service.evaluateDeloadNeed(_sampleExercises());
       expect(rec.shouldDeload, true);
       expect(rec.summary, isNotEmpty);
+    });
+
+    test('최근 날짜가 모두 디로드여도 비디로드 구간 RPE로 판정한다', () async {
+      historyRepo.historyRows = [
+        {..._historyRow('백 스쿼트', 10, '2026-03-25'), 'is_deload': 1},
+        {..._historyRow('백 스쿼트', 10, '2026-03-24'), 'is_deload': 1},
+        {..._historyRow('백 스쿼트', 10, '2026-03-23'), 'is_deload': 1},
+        {..._historyRow('백 스쿼트', 6, '2026-03-20'), 'is_deload': 0},
+        {..._historyRow('플랫 벤치 프레스', 7, '2026-03-20'), 'is_deload': 0},
+        {..._historyRow('플랫 벤치 프레스', 7, '2026-03-18'), 'is_deload': 0},
+      ];
+      progressionRepo.progressionData = {
+        '백 스쿼트': [
+          {'weight': 100.0, 'date': '2026-03-20'},
+          {'weight': 97.5, 'date': '2026-03-15'},
+          {'weight': 95.0, 'date': '2026-03-10'},
+          {'weight': 92.5, 'date': '2026-03-05'},
+        ],
+        '플랫 벤치 프레스': [
+          {'weight': 80.0, 'date': '2026-03-20'},
+          {'weight': 80.0, 'date': '2026-03-15'},
+        ],
+      };
+      deloadRepo.lastDeloadEnd = DateTime(2026, 3, 10);
+
+      final rec = await service.evaluateDeloadNeed(_sampleExercises());
+      expect(rec.shouldDeload, false);
     });
   });
 

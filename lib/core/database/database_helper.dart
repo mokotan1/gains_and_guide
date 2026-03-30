@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 12,
+      version: 13,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -43,7 +43,8 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE workout_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sets INTEGER, 
-        reps INTEGER, weight REAL, rpe INTEGER, date TEXT
+        reps INTEGER, weight REAL, rpe INTEGER, date TEXT,
+        is_deload INTEGER NOT NULL DEFAULT 0
       )
     ''');
     await db.execute('''
@@ -252,6 +253,12 @@ class DatabaseHelper {
               LIMIT 1
             )
           )
+      ''');
+    }
+    if (oldVersion < 13) {
+      await db.execute('''
+        ALTER TABLE workout_history
+        ADD COLUMN is_deload INTEGER NOT NULL DEFAULT 0
       ''');
     }
   }
@@ -497,16 +504,19 @@ class DatabaseHelper {
     return await db.query('workout_history', orderBy: 'date DESC');
   }
 
-  /// 특정 운동의 최근 N개 세션 날짜별 기록 조회 (디로드 분석용)
+  /// 특정 운동의 최근 N개 세션 날짜별 기록 조회 (디로드 분석용).
+  /// [excludeDeload] 가 true 이면 is_deload = 0 인 행만으로 세션일을 잡는다.
   Future<List<Map<String, dynamic>>> getRecentSessionsByExercise(
     String exerciseName,
-    int sessionLimit,
-  ) async {
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) async {
     final db = await instance.database;
+    final deloadClause = excludeDeload ? ' AND is_deload = 0' : '';
     final dates = await db.rawQuery('''
       SELECT DISTINCT SUBSTR(date, 1, 10) AS session_date
       FROM workout_history
-      WHERE name = ?
+      WHERE name = ?$deloadClause
       ORDER BY session_date DESC
       LIMIT ?
     ''', [exerciseName, sessionLimit]);
@@ -518,17 +528,22 @@ class DatabaseHelper {
 
     return db.rawQuery('''
       SELECT * FROM workout_history
-      WHERE name = ? AND SUBSTR(date, 1, 10) IN ($placeholders)
+      WHERE name = ? AND SUBSTR(date, 1, 10) IN ($placeholders)$deloadClause
       ORDER BY date DESC
     ''', [exerciseName, ...dateList]);
   }
 
-  /// 최근 N개 세션의 전체 기록 조회 (세션 = 고유 날짜)
-  Future<List<Map<String, dynamic>>> getRecentSessions(int sessionLimit) async {
+  /// 최근 N개 세션의 전체 기록 조회 (세션 = 고유 날짜).
+  /// [excludeDeload] 가 true 이면 비디로드 세션일만 카운트한다.
+  Future<List<Map<String, dynamic>>> getRecentSessions(
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) async {
     final db = await instance.database;
+    final deloadClause = excludeDeload ? ' WHERE is_deload = 0' : '';
     final dates = await db.rawQuery('''
       SELECT DISTINCT SUBSTR(date, 1, 10) AS session_date
-      FROM workout_history
+      FROM workout_history$deloadClause
       ORDER BY session_date DESC
       LIMIT ?
     ''', [sessionLimit]);
@@ -537,12 +552,24 @@ class DatabaseHelper {
 
     final dateList = dates.map((d) => d['session_date'] as String).toList();
     final placeholders = List.filled(dateList.length, '?').join(',');
+    final rowFilter = excludeDeload ? ' AND is_deload = 0' : '';
 
     return db.rawQuery('''
       SELECT * FROM workout_history
-      WHERE SUBSTR(date, 1, 10) IN ($placeholders)
+      WHERE SUBSTR(date, 1, 10) IN ($placeholders)$rowFilter
       ORDER BY date DESC
     ''', dateList);
+  }
+
+  /// 운동이 있었던 날짜 목록 (최신순, UI용)
+  Future<List<String>> getDistinctWorkoutSessionDates() async {
+    final db = await instance.database;
+    final res = await db.rawQuery('''
+      SELECT DISTINCT SUBSTR(date, 1, 10) AS session_date
+      FROM workout_history
+      ORDER BY session_date DESC
+    ''');
+    return res.map((r) => r['session_date'] as String).toList();
   }
 
   /// 특정 운동의 최근 프로그레션 이력 조회
@@ -581,11 +608,13 @@ class DatabaseHelper {
     });
   }
 
-  Future<Map<String, dynamic>?> getLastDeloadRecord() async {
+  /// 마지막으로 종료된 디로드 사이클 (remaining_sessions = 0, id 최신)
+  Future<Map<String, dynamic>?> getLastCompletedDeloadRecord() async {
     final db = await instance.database;
     final res = await db.query(
       'deload_history',
-      orderBy: 'end_date DESC',
+      where: 'remaining_sessions = 0',
+      orderBy: 'id DESC',
       limit: 1,
     );
     return res.isNotEmpty ? res.first : null;
@@ -601,22 +630,43 @@ class DatabaseHelper {
     return count > 0;
   }
 
-  /// 디로드 세션 1회 차감. 0이 되면 디로드 종료.
+  /// 디로드 세션 1회 차감. 0이 되면 디로드 종료 및 [end_date]를 실제 종료일로 갱신.
   /// 가장 최근 활성 행(id 내림차순)만 차감해 중복 행이 있어도 일괄 감소하지 않는다.
   Future<void> decrementDeloadSession() async {
     final db = await instance.database;
+    final active = await db.rawQuery('''
+      SELECT id FROM deload_history
+      WHERE remaining_sessions > 0
+      ORDER BY id DESC
+      LIMIT 1
+    ''');
+    if (active.isEmpty) return;
+
+    final id = active.first['id'] as int;
     await db.rawUpdate('''
       UPDATE deload_history
       SET remaining_sessions = remaining_sessions - 1
-      WHERE id = (
-        SELECT id FROM (
-          SELECT id FROM deload_history
-          WHERE remaining_sessions > 0
-          ORDER BY id DESC
-          LIMIT 1
-        )
-      )
-    ''');
+      WHERE id = ?
+    ''', [id]);
+
+    final row = await db.query(
+      'deload_history',
+      columns: ['remaining_sessions'],
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (row.isEmpty) return;
+
+    final remaining = row.first['remaining_sessions'] as int;
+    if (remaining == 0) {
+      final today = DateTime.now().toString().split(' ')[0];
+      await db.update(
+        'deload_history',
+        {'end_date': today},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------

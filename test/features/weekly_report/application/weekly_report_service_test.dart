@@ -34,13 +34,27 @@ class FakeWorkoutHistoryRepository implements WorkoutHistoryRepository {
   @override
   Future<List<Map<String, dynamic>>> getRecentSessionsByExercise(
     String exerciseName,
-    int sessionLimit,
-  ) async =>
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) async =>
       rows.where((r) => r['name'] == exerciseName).toList();
 
   @override
-  Future<List<Map<String, dynamic>>> getRecentSessions(int sessionLimit) async =>
+  Future<List<Map<String, dynamic>>> getRecentSessions(
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) async =>
       rows;
+
+  @override
+  Future<List<String>> getDistinctWorkoutSessionDates() async {
+    final dates = rows
+        .map((r) => (r['date'] as String).substring(0, 10))
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+    return dates;
+  }
 
   @override
   Future<List<Map<String, dynamic>>> getHistoryForDateRange(
@@ -280,15 +294,25 @@ class _LowChronicHistoryRepo implements WorkoutHistoryRepository {
       _inner.saveWorkoutHistory(h);
   @override
   Future<List<Map<String, dynamic>>> getRecentSessionsByExercise(
-          String n, int l) =>
-      _inner.getRecentSessionsByExercise(n, l);
+    String n,
+    int l, {
+    bool excludeDeload = false,
+  }) =>
+      _inner.getRecentSessionsByExercise(n, l, excludeDeload: excludeDeload);
   @override
-  Future<List<Map<String, dynamic>>> getRecentSessions(int l) =>
-      _inner.getRecentSessions(l);
+  Future<List<Map<String, dynamic>>> getRecentSessions(
+    int l, {
+    bool excludeDeload = false,
+  }) =>
+      _inner.getRecentSessions(l, excludeDeload: excludeDeload);
   @override
   Future<List<Map<String, dynamic>>> getHistoryForDateRange(
           String s, String e) =>
       _inner.getHistoryForDateRange(s, e);
+
+  @override
+  Future<List<String>> getDistinctWorkoutSessionDates() =>
+      _inner.getDistinctWorkoutSessionDates();
 
   @override
   Future<List<double>> getWeeklyVolumes(int weekCount) async =>

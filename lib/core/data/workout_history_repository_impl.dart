@@ -18,13 +18,25 @@ class WorkoutHistoryRepositoryImpl implements WorkoutHistoryRepository {
   @override
   Future<List<Map<String, dynamic>>> getRecentSessionsByExercise(
     String exerciseName,
-    int sessionLimit,
-  ) =>
-      _db.getRecentSessionsByExercise(exerciseName, sessionLimit);
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) =>
+      _db.getRecentSessionsByExercise(
+        exerciseName,
+        sessionLimit,
+        excludeDeload: excludeDeload,
+      );
 
   @override
-  Future<List<Map<String, dynamic>>> getRecentSessions(int sessionLimit) =>
-      _db.getRecentSessions(sessionLimit);
+  Future<List<Map<String, dynamic>>> getRecentSessions(
+    int sessionLimit, {
+    bool excludeDeload = false,
+  }) =>
+      _db.getRecentSessions(sessionLimit, excludeDeload: excludeDeload);
+
+  @override
+  Future<List<String>> getDistinctWorkoutSessionDates() =>
+      _db.getDistinctWorkoutSessionDates();
 
   @override
   Future<List<Map<String, dynamic>>> getHistoryForDateRange(

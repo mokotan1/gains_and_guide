@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/repository_providers.dart';
+import 'workout_history_screen.dart';
 
 class BodyProfileScreen extends ConsumerStatefulWidget {
   const BodyProfileScreen({super.key});
@@ -39,6 +40,21 @@ class _BodyProfileScreenState extends ConsumerState<BodyProfileScreen> {
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.history, color: Colors.black54),
+            title: const Text('날짜별 운동 기록'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const WorkoutHistoryListScreen(),
+                ),
+              );
+            },
+          ),
+          const Divider(),
+          const SizedBox(height: 8),
           TextField(
               controller: _wController,
               decoration: const InputDecoration(labelText: '몸무게 (kg)'),

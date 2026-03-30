@@ -381,6 +381,8 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   Future<void> saveCurrentWorkoutToHistory() async {
     final now = DateTime.now().toString().split(' ')[0];
     final List<Map<String, dynamic>> historyData = [];
+    final isDeloadSession = (deloadRecommendation?.shouldDeload ?? false) ||
+        await _deloadService.isCurrentlyInDeload();
 
     for (var ex in state) {
       int successSets = 0;
@@ -406,6 +408,7 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
           'weight': ex.setWeights[i],
           'rpe': rpe,
           'date': now,
+          'is_deload': isDeloadSession ? 1 : 0,
         });
       }
 

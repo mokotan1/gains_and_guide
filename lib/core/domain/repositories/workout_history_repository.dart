@@ -6,11 +6,18 @@ abstract class WorkoutHistoryRepository {
   /// 특정 운동의 최근 N개 세션 기록 (디로드 분석용)
   Future<List<Map<String, dynamic>>> getRecentSessionsByExercise(
     String exerciseName,
-    int sessionLimit,
-  );
+    int sessionLimit, {
+    bool excludeDeload = false,
+  });
 
   /// 최근 N개 세션의 전체 기록 (세션 = 고유 날짜)
-  Future<List<Map<String, dynamic>>> getRecentSessions(int sessionLimit);
+  Future<List<Map<String, dynamic>>> getRecentSessions(
+    int sessionLimit, {
+    bool excludeDeload = false,
+  });
+
+  /// 기록이 있는 운동일 목록 (최신순)
+  Future<List<String>> getDistinctWorkoutSessionDates();
 
   /// 날짜 범위 내의 모든 기록 조회 (주간 레포트용)
   /// [startDate], [endDate] 는 'YYYY-MM-DD' 형식.

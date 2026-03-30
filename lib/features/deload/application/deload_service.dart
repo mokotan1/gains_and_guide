@@ -104,6 +104,7 @@ class DeloadService {
       final rows = await _historyRepo.getRecentSessionsByExercise(
         ex.name,
         DeloadConstants.rpeLookbackSessions,
+        excludeDeload: true,
       );
       for (final row in rows) {
         final rpe = row['rpe'];
@@ -157,6 +158,7 @@ class DeloadService {
   Future<FatigueSignal> _collectFailureSignal() async {
     final rows = await _historyRepo.getRecentSessions(
       DeloadConstants.failureLookbackSessions,
+      excludeDeload: true,
     );
     if (rows.isEmpty) {
       return FatigueScoreCalculator.calculateFailureRate(
