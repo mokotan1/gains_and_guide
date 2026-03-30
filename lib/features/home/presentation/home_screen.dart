@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_vibrate/flutter_vibrate.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../../core/data/exercise_name_ko.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/workout_provider.dart';
+import '../../exercise_search/presentation/exercise_search_bottom_sheet.dart';
 import '../../deload/presentation/deload_banner_widget.dart';
 import '../../deload/presentation/deload_prediction_card.dart';
 import '../../routine/domain/exercise.dart';
@@ -59,9 +59,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // 자동 생성 실패 시 조용히 무시
     }
   }
-
-  bool _checkIsCardio(String name) =>
-      name.contains('런닝머신') || name.contains('사이클') || name.contains('유산소');
 
   bool _checkIsBodyweight(String name) {
     const keywords = ['풀업', '턱걸이', '푸쉬업', '팔굽혀펴기', '딥스', '맨몸', '플랭크'];
@@ -238,228 +235,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  void _showAddExerciseDialog() async {
-    final catalogRepo = ref.read(exerciseCatalogRepositoryProvider);
-    final List<Map<String, dynamic>> catalog = await catalogRepo.getAll();
+  Future<void> _showAddExerciseBottomSheet() async {
+    final result = await ExerciseSearchBottomSheet.show(context);
+    if (result == null || !mounted) return;
 
-    // 2. 부위별 데이터 파싱 및 분류 (기본 운동 포함하여 누락 방지)
-    final Map<String, Set<String>> rawExerciseData = {
-      '가슴': {'플랫 벤치 프레스', '인클라인 벤치 프레스', '덤벨 프레스', '펙 덱 플라이', '푸쉬업', '케이블 크로스오버'},
-      '등': {'컨벤셔널 데드리프트', '루마니안 데드리프트', '펜들레이 로우', '바벨 로우', '랫 풀다운', '풀업', '시티드 로우'},
-      '하체': {'백 스쿼트', '프론트 스쿼트', '레그 프레스', '레그 익스텐션', '레그 컬', '런지', '카프 레이즈'},
-      '어깨': {'오버헤드 프레스 (OHP)', '덤벨 숄더 프레스', '사이드 레터럴 레이즈', '프론트 레이즈', '페이스 풀'},
-      '팔': {'바벨 컬', '덤벨 컬', '해머 컬', '트라이셉스 푸쉬다운', '오버헤드 트라이셉스 익스텐션'},
-      '복근': {'크런치', '레그 레이즈', '플랭크', '케이블 크런치'},
-      '기타': {},
-      '유산소': {'런닝머신', '실내 사이클', '스텝밀(천국의 계단)'},
-    };
-
-    for (var row in catalog) {
-      final englishName = row['name']?.toString() ?? 'Unknown';
-      final koName = ExerciseNameKo.get(englishName);
-      final muscles = (row['primary_muscles']?.toString() ?? '').toLowerCase();
-      final category = (row['category']?.toString() ?? '').toLowerCase();
-
-      if (category.contains('cardio')) {
-        rawExerciseData['유산소']!.add(koName);
-        continue;
-      }
-
-      bool matched = false;
-      if (muscles.contains('chest')) { rawExerciseData['가슴']!.add(koName); matched = true; }
-      if (muscles.contains('lats') || muscles.contains('middle back') || muscles.contains('lower back') || muscles.contains('back')) { rawExerciseData['등']!.add(koName); matched = true; }
-      if (muscles.contains('quadriceps') || muscles.contains('hamstrings') || muscles.contains('glutes') || muscles.contains('calves') || muscles.contains('legs')) { rawExerciseData['하체']!.add(koName); matched = true; }
-      if (muscles.contains('shoulders') || muscles.contains('delts')) { rawExerciseData['어깨']!.add(koName); matched = true; }
-      if (muscles.contains('biceps') || muscles.contains('triceps') || muscles.contains('forearms') || muscles.contains('arms')) { rawExerciseData['팔']!.add(koName); matched = true; }
-      if (muscles.contains('abs') || muscles.contains('core')) { rawExerciseData['복근']!.add(koName); matched = true; }
-
-      if (!matched) {
-        rawExerciseData['기타']!.add(koName);
-      }
+    Exercise toAdd = result;
+    if (_checkIsBodyweight(result.name)) {
+      final profile = await ref.read(bodyProfileRepositoryProvider).getProfile();
+      final w = profile != null ? (profile['weight'] as num).toDouble() : result.weight;
+      toAdd = result.copyWith(
+        isBodyweight: true,
+        weight: w,
+        setWeights: List.filled(result.sets, w),
+      );
     }
-
-    // 3. 비어있는 카테고리 제거 및 리스트 변환 후 가나다/알파벳순 정렬
-    final Map<String, List<String>> exerciseData = {};
-    rawExerciseData.forEach((key, value) {
-      if (value.isNotEmpty) {
-        final list = value.toList()..sort();
-        exerciseData[key] = list;
-      }
-    });
-
-    if (!mounted) return;
-
-    String? selectedCategory;
-    String? selectedExercise;
-    double weight = 0.0;
-    int sets = 3;
-    int reps = 10;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          // 숫자 조절용 커스텀 위젯 (+ / - 버튼)
-          Widget buildCounter(String label, String valueStr, VoidCallback onDec, VoidCallback onInc) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: onDec,
-                      icon: const Icon(Icons.remove_circle_outline, color: AppTheme.primaryBlue),
-                      constraints: const BoxConstraints(),
-                      padding: EdgeInsets.zero,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(valueStr, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 12),
-                    IconButton(
-                      onPressed: onInc,
-                      icon: const Icon(Icons.add_circle_outline, color: AppTheme.primaryBlue),
-                      constraints: const BoxConstraints(),
-                      padding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ],
-            );
-          }
-
-          return AlertDialog(
-            title: const Text('새 운동 추가'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. 부위 선택 드롭다운
-                  DropdownButtonFormField<String>(
-                    decoration: InputDecoration(
-                      labelText: '운동 부위',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    value: selectedCategory,
-                    items: exerciseData.keys.map((String category) {
-                      return DropdownMenuItem<String>(
-                        value: category,
-                        child: Text(category),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      setDialogState(() {
-                        selectedCategory = newValue;
-                        selectedExercise = null; // 부위 변경 시 운동명 초기화
-                        if (newValue == '유산소') {
-                          sets = 1;
-                          reps = 30; // 30분 기본값
-                          weight = 0.0;
-                        } else {
-                          sets = 3;
-                          reps = 10;
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 2. 운동명 선택 드롭다운
-                  DropdownButtonFormField<String>(
-                    decoration: InputDecoration(
-                      labelText: '운동명',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    value: selectedExercise,
-                    isExpanded: true,
-                    items: selectedCategory == null
-                        ? []
-                        : exerciseData[selectedCategory]!.map((String exercise) {
-                      return DropdownMenuItem<String>(
-                        value: exercise,
-                        child: Text(exercise, overflow: TextOverflow.ellipsis),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) async {
-                      selectedExercise = newValue;
-                      // 맨몸 운동일 경우 사용자의 몸무게를 자동으로 가져옴
-                      if (newValue != null && _checkIsBodyweight(newValue)) {
-                        final profileRepo = ref.read(bodyProfileRepositoryProvider);
-                        final profile = await profileRepo.getProfile();
-                        if (profile != null) {
-                          weight = (profile['weight'] as num).toDouble();
-                        }
-                      } else if (selectedCategory == '유산소') {
-                        weight = 0.0;
-                      }
-                      setDialogState(() {});
-                    },
-                    hint: const Text('부위를 먼저 선택하세요'),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // 3. 조절 패널 (운동이 선택되었을 때만 표시)
-                  if (selectedExercise != null) ...[
-                    // 무게 조절
-                    if (selectedCategory != '유산소' && !_checkIsBodyweight(selectedExercise!)) ...[
-                      buildCounter(
-                          '무게 (kg)',
-                          weight.toStringAsFixed(1),
-                              () => setDialogState(() => weight = (weight - 2.5).clamp(0.0, 500.0)),
-                              () => setDialogState(() => weight += 2.5)
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    // 세트 및 횟수 조절
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        if (selectedCategory != '유산소')
-                          buildCounter(
-                              '세트',
-                              '$sets',
-                                  () => setDialogState(() => sets = (sets - 1).clamp(1, 20)),
-                                  () => setDialogState(() => sets += 1)
-                          ),
-                        buildCounter(
-                            selectedCategory == '유산소' ? '목표 시간 (분)' : '횟수',
-                            '$reps',
-                                () => setDialogState(() => reps = (reps - 1).clamp(1, 100)),
-                                () => setDialogState(() => reps += 1)
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-              ElevatedButton(
-                onPressed: selectedExercise == null ? null : () {
-                  _addExercise(
-                    name: selectedExercise!,
-                    weight: weight,
-                    sets: sets,
-                    reps: reps,
-                    isBodyweight: _checkIsBodyweight(selectedExercise!),
-                    isCardio: selectedCategory == '유산소',
-                  );
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryBlue,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('추가'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    ref.read(workoutProvider.notifier).addExercise(toAdd);
   }
 
   void _addExercise({
@@ -801,7 +591,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           if (!isFinished) ...[
             IconButton(onPressed: _showCardioSelectionDialog, icon: const Icon(Icons.directions_run, color: AppTheme.warningOrange)),
-            IconButton(onPressed: _showAddExerciseDialog, icon: const Icon(Icons.add_circle, color: AppTheme.primaryBlue)),
+            IconButton(onPressed: _showAddExerciseBottomSheet, icon: const Icon(Icons.add_circle, color: AppTheme.primaryBlue)),
           ]
         ],
       ),

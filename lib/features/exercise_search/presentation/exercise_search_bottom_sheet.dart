@@ -187,22 +187,25 @@ class ExerciseSearchBottomSheet extends ConsumerWidget {
                     ),
                   if (!isCardio) const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       if (!isCardio)
-                        buildCounter(
-                          '세트',
-                          '$sets',
-                          () => setDialogState(
-                              () => sets = (sets - 1).clamp(1, 20)),
-                          () => setDialogState(() => sets += 1),
+                        Expanded(
+                          child: buildCounter(
+                            '세트',
+                            '$sets',
+                            () => setDialogState(
+                                () => sets = (sets - 1).clamp(1, 20)),
+                            () => setDialogState(() => sets += 1),
+                          ),
                         ),
-                      buildCounter(
-                        isCardio ? '목표 시간 (분)' : '횟수',
-                        '$reps',
-                        () => setDialogState(
-                            () => reps = (reps - 1).clamp(1, 100)),
-                        () => setDialogState(() => reps += 1),
+                      Expanded(
+                        child: buildCounter(
+                          isCardio ? '목표 시간 (분)' : '횟수',
+                          '$reps',
+                          () => setDialogState(
+                              () => reps = (reps - 1).clamp(1, 100)),
+                          () => setDialogState(() => reps += 1),
+                        ),
                       ),
                     ],
                   ),
