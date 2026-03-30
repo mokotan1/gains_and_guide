@@ -24,7 +24,7 @@ class TestLocalizeRoutineExerciseNames(unittest.TestCase):
         }
         out = catalog.localize_routine_exercise_names(routine)
         assert out is not None
-        self.assertEqual(out["exercises"][0]["name"], "바벨 스쿼트")
+        self.assertEqual(out["exercises"][0]["name"], "백 스쿼트")
 
     def test_unknown_name_unchanged(self) -> None:
         routine = {"title": "t", "exercises": [{"name": "Unknown Lift XYZ"}]}

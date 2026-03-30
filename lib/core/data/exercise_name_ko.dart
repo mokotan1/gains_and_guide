@@ -88,7 +88,7 @@ class ExerciseNameKo {
     'Barbell Shrug Behind The Back': '바벨 비하인드 백 슈러그',
     'Barbell Side Bend': '바벨 사이드 벤드',
     'Barbell Side Split Squat': '바벨 사이드 스플릿 스쿼트',
-    'Barbell Squat': '바벨 스쿼트',
+    'Barbell Squat': '백 스쿼트',
     'Barbell Squat To A Bench': '바벨 박스 스쿼트 (벤치)',
     'Barbell Step Ups': '바벨 스텝업',
     'Barbell Walking Lunge': '바벨 워킹 런지',
