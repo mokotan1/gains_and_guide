@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 14,
+      version: 17,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -73,7 +73,12 @@ class DatabaseHelper {
         distance_km REAL,
         calories REAL,
         rpe REAL,
-        date TEXT NOT NULL
+        date TEXT NOT NULL,
+        avg_heart_rate INTEGER,
+        max_heart_rate INTEGER,
+        source TEXT NOT NULL DEFAULT 'manual',
+        external_id TEXT,
+        synced_at TEXT
       )
     ''');
   }
@@ -175,7 +180,8 @@ class DatabaseHelper {
         level TEXT NOT NULL,
         frequency TEXT NOT NULL,
         equipment TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        birth_year INTEGER
       )
     ''');
   }
@@ -279,6 +285,40 @@ class DatabaseHelper {
     }
     if (oldVersion < 14) {
       await _createCardioHistoryTable(db);
+    }
+    if (oldVersion < 15) {
+      await db.execute('''
+        ALTER TABLE cardio_history ADD COLUMN avg_heart_rate INTEGER
+      ''');
+      await db.execute('''
+        ALTER TABLE cardio_history ADD COLUMN max_heart_rate INTEGER
+      ''');
+    }
+    if (oldVersion < 16) {
+      await db.execute('''
+        ALTER TABLE cardio_history ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'
+      ''');
+      await db.execute('''
+        ALTER TABLE cardio_history ADD COLUMN external_id TEXT
+      ''');
+      await db.execute('''
+        ALTER TABLE cardio_history ADD COLUMN synced_at TEXT
+      ''');
+      await db.rawUpdate('''
+        UPDATE cardio_history
+        SET source = 'health'
+        WHERE cardio_name LIKE 'HealthSync|%'
+      ''');
+      await db.execute('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_cardio_history_user_external
+        ON cardio_history (user_id, external_id)
+        WHERE external_id IS NOT NULL
+      ''');
+    }
+    if (oldVersion < 17) {
+      await db.execute('''
+        ALTER TABLE user_profile ADD COLUMN birth_year INTEGER
+      ''');
     }
   }
 
@@ -739,6 +779,41 @@ class DatabaseHelper {
     await batch.commit(noResult: true);
   }
 
+  /// [source] 가 일치하는 행만 삭제 (예: [kCardioSourceHealth] 로 웨어러블 동기화 구간 초기화).
+  /// [startDate], [endDate] 는 'YYYY-MM-DD'.
+  Future<void> deleteCardioBySourceInDateRange(
+    String userId,
+    String startDate,
+    String endDate,
+    String source,
+  ) async {
+    final db = await instance.database;
+    await db.delete(
+      'cardio_history',
+      where:
+          'user_id = ? AND SUBSTR(date, 1, 10) >= ? AND SUBSTR(date, 1, 10) <= ? AND source = ?',
+      whereArgs: [userId, startDate, endDate, source],
+    );
+  }
+
+  Future<void> updateCardioSyncedAtByExternalIds(
+    List<String> externalIds,
+    String syncedAtIso,
+  ) async {
+    if (externalIds.isEmpty) return;
+    final db = await instance.database;
+    final batch = db.batch();
+    for (final id in externalIds) {
+      batch.update(
+        'cardio_history',
+        {'synced_at': syncedAtIso},
+        where: 'external_id = ?',
+        whereArgs: [id],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   /// 날짜 범위 내 유산소 기록 (주간 레포트용)
   Future<List<Map<String, dynamic>>> getCardioHistoryForDateRange(
     String startDate,
@@ -831,11 +906,22 @@ class DatabaseHelper {
 
   Future<void> saveUserProfile(Map<String, dynamic> profile) async {
     final db = await instance.database;
-    await db.insert(
-      'user_profile',
-      profile,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    final existing = await getUserProfile();
+    if (existing != null) {
+      final merged = Map<String, dynamic>.from(existing);
+      merged.addAll(profile);
+      await db.insert(
+        'user_profile',
+        merged,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } else {
+      await db.insert(
+        'user_profile',
+        profile,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
   }
 
   Future<Map<String, dynamic>?> getUserProfile() async {

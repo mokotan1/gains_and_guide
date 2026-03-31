@@ -129,6 +129,20 @@ class _NoopCardioRepo implements CardioHistoryRepository {
 
   @override
   Future<List<double>> getWeeklyCardioLoads(int weekCount) async => [];
+
+  @override
+  Future<void> deleteCardioBySourceInDateRange(
+    String userId,
+    String startDate,
+    String endDate,
+    String source,
+  ) async {}
+
+  @override
+  Future<void> updateSyncedAtForExternalIds(
+    List<String> externalIds,
+    String syncedAtIso,
+  ) async {}
 }
 
 class _NoopProgressionRepo implements ProgressionRepository {

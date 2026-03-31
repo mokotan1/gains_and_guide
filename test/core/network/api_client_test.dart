@@ -14,6 +14,8 @@ void main() {
   const testConfig = AppConfig(
     apiBaseUrl: 'https://test.example.com',
     defaultTimeout: Duration(seconds: 5),
+    supabaseUrl: '',
+    supabaseAnonKey: '',
   );
 
   ApiClient _createClient(http.Client mockHttp) {

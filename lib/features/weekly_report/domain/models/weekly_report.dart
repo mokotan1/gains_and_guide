@@ -86,6 +86,7 @@ class WeeklyReport {
       'prevWeekCardioLoad': metrics.prevWeekCardioLoad,
       'acuteCardioLoad': metrics.acuteCardioLoad,
       'avgCardioRpe': metrics.avgCardioRpe,
+      'cardioSessionLinesForAi': metrics.cardioSessionLinesForAi,
     };
     return jsonEncode(map);
   }
@@ -131,6 +132,10 @@ class WeeklyReport {
       prevWeekCardioLoad: (map['prevWeekCardioLoad'] as num?)?.toDouble(),
       acuteCardioLoad: (map['acuteCardioLoad'] as num?)?.toDouble() ?? 0,
       avgCardioRpe: (map['avgCardioRpe'] as num?)?.toDouble() ?? 0,
+      cardioSessionLinesForAi: (map['cardioSessionLinesForAi'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
     );
 
     return WeeklyReport(

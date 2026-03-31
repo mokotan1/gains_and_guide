@@ -3,6 +3,7 @@ import '../features/deload/application/deload_service.dart';
 import '../features/routine/domain/exercise.dart';
 import '../features/routine/application/workout_service.dart';
 import 'auth/user_identity.dart';
+import 'constants/cardio_source.dart';
 import 'constants/workout_constants.dart';
 import 'domain/models/deload_recommendation.dart';
 import 'providers/repository_providers.dart';
@@ -404,6 +405,9 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
             'calories': null,
             'rpe': rpe.toDouble(),
             'date': now,
+            'source': kCardioSourceManual,
+            'external_id': null,
+            'synced_at': null,
           });
         }
         continue;

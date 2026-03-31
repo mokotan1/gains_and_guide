@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_background/flutter_background.dart';
 import 'package:gains_and_guide/core/auth/auth_session.dart';
 import 'package:gains_and_guide/core/bootstrap/database_bootstrap.dart';
+import 'package:gains_and_guide/core/bootstrap/health_foreground_sync.dart';
 import 'package:gains_and_guide/core/config/app_config.dart';
 import 'package:gains_and_guide/core/database/database_helper.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gains_and_guide/core/theme/app_theme.dart';
 import 'package:gains_and_guide/features/home/presentation/body_profile_screen.dart';
 import 'package:gains_and_guide/features/home/presentation/home_screen.dart';
@@ -19,6 +21,12 @@ void main() async {
   await DatabaseBootstrap.run(DatabaseHelper.instance);
 
   final appConfig = AppConfig.fromEnvironment();
+  if (appConfig.supabaseConfigured) {
+    await Supabase.initialize(
+      url: appConfig.supabaseUrl,
+      anonKey: appConfig.supabaseAnonKey,
+    );
+  }
   await AuthSession.instance.initialize(appConfig);
 
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
@@ -48,7 +56,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.light,
       theme: AppTheme.lightTheme,
-      home: const AppEntryPoint(),
+      home: const HealthForegroundSync(child: AppEntryPoint()),
     );
   }
 }

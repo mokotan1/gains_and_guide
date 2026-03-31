@@ -127,6 +127,9 @@ class UserProfile {
   final Set<EquipmentType> equipment;
   final DateTime createdAt;
 
+  /// 출생 연도 (선택). 심박 존 추정 참고용.
+  final int? birthYear;
+
   const UserProfile({
     this.id = 1,
     required this.goal,
@@ -134,6 +137,7 @@ class UserProfile {
     required this.frequency,
     required this.equipment,
     required this.createdAt,
+    this.birthYear,
   });
 
   Map<String, dynamic> toMap() {
@@ -144,6 +148,7 @@ class UserProfile {
       'frequency': frequency.name,
       'equipment': json.encode(equipment.map((e) => e.name).toList()),
       'created_at': createdAt.toIso8601String(),
+      if (birthYear != null) 'birth_year': birthYear,
     };
   }
 
@@ -158,6 +163,7 @@ class UserProfile {
           .map((e) => EquipmentType.values.byName(e as String))
           .toSet(),
       createdAt: DateTime.parse(map['created_at'] as String),
+      birthYear: map['birth_year'] as int?,
     );
   }
 
@@ -166,6 +172,8 @@ class UserProfile {
     TrainingLevel? level,
     WeeklyFrequency? frequency,
     Set<EquipmentType>? equipment,
+    int? birthYear,
+    bool clearBirthYear = false,
   }) {
     return UserProfile(
       id: id,
@@ -174,6 +182,7 @@ class UserProfile {
       frequency: frequency ?? this.frequency,
       equipment: equipment ?? this.equipment,
       createdAt: createdAt,
+      birthYear: clearBirthYear ? null : (birthYear ?? this.birthYear),
     );
   }
 }

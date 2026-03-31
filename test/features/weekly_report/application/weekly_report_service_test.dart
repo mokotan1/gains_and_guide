@@ -4,8 +4,10 @@ import 'package:http/testing.dart' as http_testing;
 
 import 'package:gains_and_guide/core/auth/user_identity.dart';
 import 'package:gains_and_guide/core/config/app_config.dart';
+import 'package:gains_and_guide/core/domain/models/user_profile.dart';
 import 'package:gains_and_guide/core/domain/repositories/cardio_history_repository.dart';
 import 'package:gains_and_guide/core/domain/repositories/exercise_catalog_repository.dart';
+import 'package:gains_and_guide/core/domain/repositories/user_profile_repository.dart';
 import 'package:gains_and_guide/core/domain/repositories/workout_history_repository.dart';
 import 'package:gains_and_guide/core/network/api_client.dart';
 import 'package:gains_and_guide/features/routine/domain/exercise_catalog.dart';
@@ -95,6 +97,20 @@ class FakeCardioHistoryRepository implements CardioHistoryRepository {
   Future<List<double>> getWeeklyCardioLoads(int weekCount) async {
     return List.filled(weekCount, 100.0);
   }
+
+  @override
+  Future<void> deleteCardioBySourceInDateRange(
+    String userId,
+    String startDate,
+    String endDate,
+    String source,
+  ) async {}
+
+  @override
+  Future<void> updateSyncedAtForExternalIds(
+    List<String> externalIds,
+    String syncedAtIso,
+  ) async {}
 }
 
 class FakeExerciseCatalogRepository implements ExerciseCatalogRepository {
@@ -115,6 +131,17 @@ class FakeExerciseCatalogRepository implements ExerciseCatalogRepository {
 
   @override
   Future<List<String>> getRecentExerciseNames({int limit = 5}) async => [];
+}
+
+class FakeUserProfileRepository implements UserProfileRepository {
+  @override
+  Future<void> saveProfile(UserProfile profile) async {}
+
+  @override
+  Future<UserProfile?> getProfile() async => null;
+
+  @override
+  Future<bool> isOnboardingCompleted() async => true;
 }
 
 class FakeWeeklyReportRepository implements WeeklyReportRepository {
@@ -149,6 +176,7 @@ void main() {
   late FakeExerciseCatalogRepository catalogRepo;
   late FakeWeeklyReportRepository reportRepo;
   late RoutineRecommendationService routineRecService;
+  late FakeUserProfileRepository userProfileRepo;
   late WeeklyReportService service;
 
   final monday = DateTime(2026, 3, 23);
@@ -156,6 +184,8 @@ void main() {
   final testConfig = const AppConfig(
     apiBaseUrl: 'http://localhost:0',
     defaultTimeout: Duration(seconds: 5),
+    supabaseUrl: '',
+    supabaseAnonKey: '',
   );
 
   setUp(() {
@@ -168,6 +198,7 @@ void main() {
     });
     final apiClient = ApiClient(testConfig, httpClient: failingHttp);
     final userIdentity = _TestUserIdentity();
+    userProfileRepo = FakeUserProfileRepository();
     routineRecService = RoutineRecommendationService(
       catalogRepo,
       apiClient: apiClient,
@@ -181,6 +212,7 @@ void main() {
       routineRecService,
       apiClient: apiClient,
       userIdentity: userIdentity,
+      userProfileRepository: userProfileRepo,
     );
   });
 
@@ -311,6 +343,7 @@ void main() {
         routineRecService,
         apiClient: apiClient,
         userIdentity: userIdentity,
+        userProfileRepository: userProfileRepo,
       );
       final report = await service.getOrGenerateReport(weekStart: monday);
 

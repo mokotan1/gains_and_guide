@@ -64,6 +64,8 @@ class _FakeUserIdentity implements UserIdentity {
 const _testConfig = AppConfig(
   apiBaseUrl: 'https://test.example.com',
   defaultTimeout: Duration(seconds: 5),
+  supabaseUrl: '',
+  supabaseAnonKey: '',
 );
 
 WeeklyReport _createTestReport({

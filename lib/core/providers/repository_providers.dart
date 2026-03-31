@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:health/health.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide UserIdentity;
 
 import '../auth/auth_session.dart';
 import '../auth/token_user_identity.dart';
@@ -14,7 +16,11 @@ import '../data/favorite_exercise_repository_impl.dart';
 import '../data/progression_repository_impl.dart';
 import '../data/user_profile_repository_impl.dart';
 import '../data/cardio_history_repository_impl.dart';
+import '../data/health_cardio_sync_repository_impl.dart';
+import '../data/supabase_cardio_remote_sync.dart';
 import '../data/workout_history_repository_impl.dart';
+import '../domain/health/cardio_remote_sync.dart';
+import '../domain/health/health_cardio_sync_repository.dart';
 import '../domain/repositories/body_profile_repository.dart';
 import '../domain/repositories/cardio_catalog_repository.dart';
 import '../domain/repositories/deload_repository.dart';
@@ -52,6 +58,23 @@ final workoutHistoryRepositoryProvider = Provider<WorkoutHistoryRepository>((ref
 
 final cardioHistoryRepositoryProvider = Provider<CardioHistoryRepository>((ref) {
   return CardioHistoryRepositoryImpl(ref.watch(_dbProvider));
+});
+
+final cardioRemoteSyncProvider = Provider<CardioRemoteSync?>((ref) {
+  final config = ref.watch(appConfigProvider);
+  if (!config.supabaseConfigured) return null;
+  return SupabaseCardioRemoteSync(
+    client: Supabase.instance.client,
+    cardioHistoryRepository: ref.watch(cardioHistoryRepositoryProvider),
+  );
+});
+
+final healthCardioSyncRepositoryProvider = Provider<HealthCardioSyncRepository>((ref) {
+  return HealthCardioSyncRepositoryImpl(
+    health: Health(),
+    cardioHistoryRepository: ref.watch(cardioHistoryRepositoryProvider),
+    remoteSync: ref.watch(cardioRemoteSyncProvider),
+  );
 });
 
 final progressionRepositoryProvider = Provider<ProgressionRepository>((ref) {

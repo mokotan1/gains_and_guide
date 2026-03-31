@@ -46,8 +46,13 @@ class WeeklyMetricsCalculator {
         prevWeekCardioLoad: chronicWeeklyCardioLoads.isNotEmpty
             ? chronicWeeklyCardioLoads.first
             : null,
+        cardioSessionLinesForAi: const [],
       );
     }
+
+    final cardioSessionLinesForAi = cardioEmpty
+        ? const <String>[]
+        : buildCardioSessionLinesForAi(currentCardioRows);
 
     final totalCardioSessions =
         cardioEmpty ? 0 : _countUniqueDates(currentCardioRows);
@@ -90,6 +95,7 @@ class WeeklyMetricsCalculator {
         prevWeekCardioLoad: prevWeekCardioLoad,
         acuteCardioLoad: acuteCardioLoad,
         avgCardioRpe: avgCardioRpe,
+        cardioSessionLinesForAi: cardioSessionLinesForAi,
       );
     }
 
@@ -132,7 +138,48 @@ class WeeklyMetricsCalculator {
       prevWeekCardioLoad: prevWeekCardioLoad,
       acuteCardioLoad: acuteCardioLoad,
       avgCardioRpe: avgCardioRpe,
+      cardioSessionLinesForAi: cardioSessionLinesForAi,
     );
+  }
+
+  /// AI 프롬프트용 유산소 세션 한 줄 요약 (날짜순).
+  static List<String> buildCardioSessionLinesForAi(
+    List<Map<String, dynamic>> rows,
+  ) {
+    if (rows.isEmpty) return [];
+    final sorted = List<Map<String, dynamic>>.from(rows);
+    sorted.sort((a, b) {
+      final da = (a['date']?.toString() ?? '').substring(0, 10);
+      final db = (b['date']?.toString() ?? '').substring(0, 10);
+      return da.compareTo(db);
+    });
+    return sorted.map(_formatCardioRowForAi).toList();
+  }
+
+  static String _formatCardioRowForAi(Map<String, dynamic> r) {
+    final name = r['cardio_name'] as String? ?? '';
+    final date = (r['date']?.toString() ?? '').length >= 10
+        ? (r['date'] as String).substring(0, 10)
+        : (r['date']?.toString() ?? '');
+    final dm = (r['duration_minutes'] as num?)?.toDouble() ?? 0;
+    final dist = r['distance_km'] as num?;
+    final avgHr = r['avg_heart_rate'] as int?;
+    final maxHr = r['max_heart_rate'] as int?;
+    final src = r['source'] as String? ?? 'manual';
+    final buf = StringBuffer('$date: $name ${dm.toStringAsFixed(0)}분');
+    if (dist != null) {
+      buf.write(' (거리: ${dist.toStringAsFixed(1)}km)');
+    }
+    if (avgHr != null || maxHr != null) {
+      buf.write(
+        ' (평균 심박: ${avgHr ?? '-'}bpm, 최대 심박: ${maxHr ?? '-'}bpm)',
+      );
+    } else if (src == 'health') {
+      buf.write(' (웨어러블 심박 샘플 없음)');
+    } else {
+      buf.write(' (수동 기록, 심박 미기록)');
+    }
+    return buf.toString();
   }
 
   // ---------------------------------------------------------------------------

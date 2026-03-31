@@ -5,6 +5,7 @@ import '../../../core/auth/user_identity.dart';
 import '../../../core/constants/report_constants.dart';
 import '../../../core/domain/repositories/cardio_history_repository.dart';
 import '../../../core/domain/repositories/exercise_catalog_repository.dart';
+import '../../../core/domain/repositories/user_profile_repository.dart';
 import '../../../core/domain/repositories/workout_history_repository.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/network/api_client.dart';
@@ -29,6 +30,7 @@ class WeeklyReportService {
   final RoutineRecommendationService _routineRecommendationService;
   final ApiClient _apiClient;
   final UserIdentity _userIdentity;
+  final UserProfileRepository _userProfileRepo;
 
   WeeklyReportService(
     this._historyRepo,
@@ -38,8 +40,10 @@ class WeeklyReportService {
     this._routineRecommendationService, {
     required ApiClient apiClient,
     required UserIdentity userIdentity,
+    required UserProfileRepository userProfileRepository,
   })  : _apiClient = apiClient,
-        _userIdentity = userIdentity;
+        _userIdentity = userIdentity,
+        _userProfileRepo = userProfileRepository;
 
   /// 지정 주의 레포트를 생성(또는 캐시에서 반환)한다.
   ///
@@ -75,7 +79,7 @@ class WeeklyReportService {
   /// 단, 로그에는 에러 유형을 기록한다.
   Future<WeeklyReport> enrichWithAi(WeeklyReport report) async {
     try {
-      final summary = _buildAiSummaryPayload(report.metrics);
+      final summary = await _buildAiSummaryPayload(report.metrics);
 
       final data = await _apiClient.post('/chat', {
         'user_id': _userIdentity.userId,
@@ -136,7 +140,7 @@ class WeeklyReportService {
     if (!UserMemorySyncService.enabled) return;
     final weekKey =
         '${report.weekStart.year}-${report.weekStart.month.toString().padLeft(2, '0')}-${report.weekStart.day.toString().padLeft(2, '0')}';
-    final text = _buildAiSummaryPayload(report.metrics);
+    final text = await _buildAiSummaryPayload(report.metrics);
     await UserMemorySyncService(_apiClient).uploadWeeklyDigest(weekKey, text);
   }
 
@@ -199,7 +203,14 @@ class WeeklyReportService {
     return map;
   }
 
-  String _buildAiSummaryPayload(WeeklyMetrics metrics) {
+  Future<String> _buildAiSummaryPayload(WeeklyMetrics metrics) async {
+    final profile = await _userProfileRepo.getProfile();
+    final birthYear = profile?.birthYear;
+    final age = birthYear != null
+        ? DateTime.now().year - birthYear
+        : null;
+    final estimatedHrMax = age != null ? (220 - age) : null;
+
     final buf = StringBuffer()
       ..writeln('주간 운동 요약 데이터:')
       ..writeln('기간: ${_dateStr(metrics.weekStart)} ~ ${_dateStr(metrics.weekEnd)}')
@@ -208,6 +219,12 @@ class WeeklyReportService {
       ..writeln('평균 RPE: ${metrics.avgRpe.toStringAsFixed(1)}')
       ..writeln('근력 볼륨 비율: ${metrics.acwr.toStringAsFixed(2)}')
       ..writeln('실패율: ${(metrics.failureRate * 100).toStringAsFixed(0)}%');
+
+    if (birthYear != null && estimatedHrMax != null) {
+      buf.writeln(
+        '추정 최대 심박 참고 (220-나이): 약 ${estimatedHrMax}bpm (출생연도 $birthYear 기준, 개인차 있음)',
+      );
+    }
 
     if (metrics.prevWeekVolume != null) {
       buf.writeln('지난 주 볼륨: ${metrics.prevWeekVolume!.toStringAsFixed(0)}kg');
@@ -236,6 +253,15 @@ class WeeklyReportService {
       ..writeln(
           '유산소 급성 부하(분×RPE): ${metrics.acuteCardioLoad.toStringAsFixed(0)}')
       ..writeln('심폐 부하 비율: ${metrics.cardioAcwr.toStringAsFixed(2)}');
+
+    if (metrics.cardioSessionLinesForAi.isNotEmpty) {
+      buf
+        ..writeln('')
+        ..writeln('[이번 주 유산소 세션 상세]');
+      for (final line in metrics.cardioSessionLinesForAi) {
+        buf.writeln('- $line');
+      }
+    }
 
     return buf.toString();
   }
@@ -268,5 +294,6 @@ final weeklyReportServiceProvider = Provider<WeeklyReportService>((ref) {
     ref.watch(routineRecommendationServiceProvider),
     apiClient: ref.watch(apiClientProvider),
     userIdentity: ref.watch(userIdentityProvider),
+    userProfileRepository: ref.watch(userProfileRepositoryProvider),
   );
 });

@@ -43,6 +43,9 @@ class WeeklyMetrics {
   /// 유산소 세트 평균 RPE (데이터 없으면 0)
   final double avgCardioRpe;
 
+  /// AI 컨텍스트용 유산소 세션 한 줄 요약 (날짜·종목·심박 등)
+  final List<String> cardioSessionLinesForAi;
+
   const WeeklyMetrics({
     required this.weekStart,
     required this.weekEnd,
@@ -63,6 +66,7 @@ class WeeklyMetrics {
     this.prevWeekCardioLoad,
     this.acuteCardioLoad = 0,
     this.avgCardioRpe = 0,
+    this.cardioSessionLinesForAi = const [],
   });
 
   /// 볼륨 주간 증감률 (%). prevWeekVolume 이 없으면 null.
@@ -98,7 +102,8 @@ class WeeklyMetrics {
         cardioAcwr = 0,
         prevWeekCardioLoad = null,
         acuteCardioLoad = 0,
-        avgCardioRpe = 0;
+        avgCardioRpe = 0,
+        cardioSessionLinesForAi = const [];
 }
 
 /// 운동별 예상 1RM (Epley 공식 기반)

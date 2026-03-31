@@ -56,6 +56,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
       frequency: state.frequency!,
       equipment: state.equipment,
       createdAt: DateTime.now(),
+      birthYear: null,
     );
   }
 }
