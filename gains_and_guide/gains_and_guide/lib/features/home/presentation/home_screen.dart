@@ -32,9 +32,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.dispose();
   }
 
-  bool _checkIsCardio(String name) =>
-      name.contains('런닝머신') || name.contains('사이클') || name.contains('유산소');
-
   bool _checkIsBodyweight(String name) {
     const keywords = ['풀업', '턱걸이', '푸쉬업', '팔굽혀펴기', '딥스', '맨몸', '플랭크'];
     return keywords.any((k) => name.contains(k));
@@ -180,30 +177,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // --- 운동 추가 및 제어 로직 ---
-  void _showCardioSelectionDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('유산소 추가'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.directions_bike, color: AppTheme.warningOrange),
-              title: const Text('실내 사이클'),
-              onTap: () { _addExercise(name: '실내 사이클', isCardio: true); Navigator.pop(context); },
-            ),
-            ListTile(
-              leading: const Icon(Icons.directions_run, color: AppTheme.warningOrange),
-              title: const Text('런닝머신'),
-              onTap: () { _addExercise(name: '런닝머신', isCardio: true); Navigator.pop(context); },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showAddExerciseDialog() async {
     // 1. 카탈로그 리포지토리에서 운동 목록 조회
     final catalogList = await ref.read(exerciseCatalogRepositoryProvider).getAll();
@@ -658,10 +631,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text('Gains & Guide'),
         actions: [
-          if (!isFinished) ...[
-            IconButton(onPressed: _showCardioSelectionDialog, icon: const Icon(Icons.directions_run, color: AppTheme.warningOrange)),
+          if (!isFinished)
             IconButton(onPressed: _showAddExerciseDialog, icon: const Icon(Icons.add_circle, color: AppTheme.primaryBlue)),
-          ]
         ],
       ),
       body: SingleChildScrollView(

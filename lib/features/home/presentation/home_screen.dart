@@ -211,30 +211,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // --- 운동 추가 및 제어 로직 ---
-  void _showCardioSelectionDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('유산소 추가'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.directions_bike, color: AppTheme.warningOrange),
-              title: const Text('실내 사이클'),
-              onTap: () { _addExercise(name: '실내 사이클', isCardio: true); Navigator.pop(context); },
-            ),
-            ListTile(
-              leading: const Icon(Icons.directions_run, color: AppTheme.warningOrange),
-              title: const Text('런닝머신'),
-              onTap: () { _addExercise(name: '런닝머신', isCardio: true); Navigator.pop(context); },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _showAddExerciseBottomSheet() async {
     final result = await ExerciseSearchBottomSheet.show(context);
     if (result == null || !mounted) return;
@@ -250,25 +226,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
     ref.read(workoutProvider.notifier).addExercise(toAdd);
-  }
-
-  void _addExercise({
-    required String name,
-    double weight = 0,
-    int sets = 3,
-    int reps = 10,
-    bool isBodyweight = false,
-    bool isCardio = false,
-  }) {
-    ref.read(workoutProvider.notifier).addExercise(Exercise.initial(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name,
-      sets: isCardio ? 1 : sets,
-      reps: isCardio ? 30 : reps,
-      weight: weight,
-      isBodyweight: isBodyweight,
-      isCardio: isCardio,
-    ));
   }
 
   void _toggleSetStatus(int exIdx, int sIdx, List<Exercise> exercises) {
@@ -589,10 +546,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             icon: const Icon(Icons.bar_chart_rounded),
             tooltip: '주간 레포트',
           ),
-          if (!isFinished) ...[
-            IconButton(onPressed: _showCardioSelectionDialog, icon: const Icon(Icons.directions_run, color: AppTheme.warningOrange)),
+          if (!isFinished)
             IconButton(onPressed: _showAddExerciseBottomSheet, icon: const Icon(Icons.add_circle, color: AppTheme.primaryBlue)),
-          ]
         ],
       ),
       body: SingleChildScrollView(
