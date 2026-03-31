@@ -206,7 +206,7 @@ class WeeklyReportService {
       ..writeln('훈련 횟수: ${metrics.totalSessions}회')
       ..writeln('총 볼륨: ${metrics.totalVolume.toStringAsFixed(0)}kg')
       ..writeln('평균 RPE: ${metrics.avgRpe.toStringAsFixed(1)}')
-      ..writeln('ACWR: ${metrics.acwr.toStringAsFixed(2)}')
+      ..writeln('근력 볼륨 비율: ${metrics.acwr.toStringAsFixed(2)}')
       ..writeln('실패율: ${(metrics.failureRate * 100).toStringAsFixed(0)}%');
 
     if (metrics.prevWeekVolume != null) {
@@ -235,7 +235,7 @@ class WeeklyReportService {
       ..writeln('유산소 평균 RPE: ${metrics.avgCardioRpe.toStringAsFixed(1)}')
       ..writeln(
           '유산소 급성 부하(분×RPE): ${metrics.acuteCardioLoad.toStringAsFixed(0)}')
-      ..writeln('유산소 ACWR: ${metrics.cardioAcwr.toStringAsFixed(2)}');
+      ..writeln('심폐 부하 비율: ${metrics.cardioAcwr.toStringAsFixed(2)}');
 
     return buf.toString();
   }

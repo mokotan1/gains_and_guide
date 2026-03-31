@@ -178,15 +178,15 @@ class WeeklyReportGenerator {
   static List<WarningInsight> _buildWarnings(WeeklyMetrics metrics) {
     final results = <WarningInsight>[];
 
-    // ACWR 위험
+    // 근력 볼륨 비율 위험
     if (metrics.acwr > ReportConstants.acwrSweetSpotMax) {
       final severity = metrics.acwr > ReportConstants.acwrDangerMax
           ? InsightSeverity.critical
           : InsightSeverity.warning;
       results.add(WarningInsight(
-        title: 'ACWR 과부하 경고',
+        title: '근력 볼륨 비율 과부하 경고',
         description:
-            'ACWR ${metrics.acwr.toStringAsFixed(2)}로 '
+            '근력 볼륨 비율 ${metrics.acwr.toStringAsFixed(2)}로 '
             '안전 범위(${ReportConstants.acwrSweetSpotMax} 이하)를 초과했습니다. '
             '오버트레이닝 위험이 있습니다.',
         severity: severity,
@@ -224,15 +224,15 @@ class WeeklyReportGenerator {
     // 근육군 불균형
     _detectMuscleImbalance(metrics).forEach(results.add);
 
-    // 유산소 ACWR 과부하 (웨이트 ACWR과 분리)
+    // 심폐 부하 비율 과부하 (근력 볼륨 비율과 분리)
     if (metrics.cardioAcwr > ReportConstants.cardioAcwrSweetSpotMax) {
       final severity = metrics.cardioAcwr > ReportConstants.cardioAcwrDangerMax
           ? InsightSeverity.critical
           : InsightSeverity.warning;
       results.add(WarningInsight(
-        title: '유산소 부하 ACWR 경고',
+        title: '심폐 부하 비율 과부하 경고',
         description:
-            '유산소 급성 부하 대비 만성 평균 비율이 '
+            '심폐 부하 비율(급성 대 만성)이 '
             '${metrics.cardioAcwr.toStringAsFixed(2)}로 '
             '권장 상한(${ReportConstants.cardioAcwrSweetSpotMax})을 넘었습니다. '
             '전체 피로·회복을 점검하세요.',
@@ -285,7 +285,7 @@ class WeeklyReportGenerator {
     final results = <ActionItem>[];
     int priority = 1;
 
-    // ACWR 과부하 → 볼륨 감소 + RPE 조절 권장
+    // 근력 볼륨 비율 과부하 → 볼륨 감소 + RPE 조절 권장
     if (metrics.acwr > ReportConstants.acwrSweetSpotMax) {
       final reductionPct =
           ReportConstants.recommendedVolumeReductionPercent.toStringAsFixed(0);
@@ -296,7 +296,7 @@ class WeeklyReportGenerator {
             '다음 주는 총 볼륨을 $reductionPct% 줄이고, '
             'RPE $targetRpe 수준으로 강도를 낮추는 디로딩 주간을 권장합니다.',
         rationale:
-            'ACWR ${metrics.acwr.toStringAsFixed(2)}로 과부하 상태이므로 '
+            '근력 볼륨 비율 ${metrics.acwr.toStringAsFixed(2)}로 과부하 상태이므로 '
             '부상 방지를 위해 단기 회복이 필요합니다.',
         priority: priority++,
       ));
@@ -332,7 +332,7 @@ class WeeklyReportGenerator {
       results.add(ActionItem(
         instruction: '다음 주는 훈련 빈도를 1회 늘리거나 세트 수를 추가해보세요.',
         rationale:
-            'ACWR ${metrics.acwr.toStringAsFixed(2)}로 훈련 볼륨이 '
+            '근력 볼륨 비율 ${metrics.acwr.toStringAsFixed(2)}로 훈련 볼륨이 '
             '평소보다 낮아 자극이 부족할 수 있습니다.',
         priority: priority++,
       ));
@@ -343,7 +343,7 @@ class WeeklyReportGenerator {
       results.add(ActionItem(
         instruction: '유산소는 시간이나 강도(RPE) 중 하나를 낮추고, 수면·영양으로 회복을 보강하세요.',
         rationale:
-            '유산소 ACWR ${metrics.cardioAcwr.toStringAsFixed(2)}로 '
+            '심폐 부하 비율 ${metrics.cardioAcwr.toStringAsFixed(2)}로 '
             '심폐 부하가 한동안의 평균보다 큽니다.',
         priority: priority++,
       ));

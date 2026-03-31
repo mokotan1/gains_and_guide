@@ -64,7 +64,7 @@ class RoutineRecommendationService {
       ..writeln('훈련 횟수: ${m.totalSessions}회')
       ..writeln('총 볼륨: ${m.totalVolume.toStringAsFixed(0)}kg')
       ..writeln('평균 RPE: ${m.avgRpe.toStringAsFixed(1)}')
-      ..writeln('ACWR: ${m.acwr.toStringAsFixed(2)}')
+      ..writeln('근력 볼륨 비율: ${m.acwr.toStringAsFixed(2)}')
       ..writeln('실패율: ${(m.failureRate * 100).toStringAsFixed(0)}%');
 
     if (m.prevWeekVolume != null) {

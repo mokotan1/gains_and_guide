@@ -220,7 +220,7 @@ void main() {
     test('ACWR > 1.3 → ACWR 과부하 경고 포함', () {
       final report = WeeklyReportGenerator.generate(_metrics(acwr: 1.35));
       final acwrW = report.warnings
-          .where((w) => w.title == 'ACWR 과부하 경고')
+          .where((w) => w.title == '근력 볼륨 비율 과부하 경고')
           .toList();
       expect(acwrW, isNotEmpty);
       expect(acwrW.first.metricValue, 1.35);
@@ -229,7 +229,7 @@ void main() {
     test('ACWR > 1.5 → critical severity', () {
       final report = WeeklyReportGenerator.generate(_metrics(acwr: 1.6));
       final acwrW = report.warnings
-          .firstWhere((w) => w.title == 'ACWR 과부하 경고');
+          .firstWhere((w) => w.title == '근력 볼륨 비율 과부하 경고');
       expect(acwrW.severity, InsightSeverity.critical);
     });
 
@@ -281,7 +281,7 @@ void main() {
     test('ACWR <= 1.3 이면 웨이트 ACWR 경고 없음', () {
       final report = WeeklyReportGenerator.generate(_metrics(acwr: 1.2));
       final acwrW = report.warnings
-          .where((w) => w.title == 'ACWR 과부하 경고')
+          .where((w) => w.title == '근력 볼륨 비율 과부하 경고')
           .toList();
       expect(acwrW, isEmpty);
     });

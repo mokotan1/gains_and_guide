@@ -338,7 +338,7 @@ class _MetricsSummaryRow extends StatelessWidget {
             ),
           if (m.acwr > 0)
             _Badge(
-              label: 'ACWR',
+              label: '근력 볼륨 비율',
               value: m.acwr.toStringAsFixed(2),
               highlight: m.acwr > ReportConstants.acwrSweetSpotMax,
             ),
@@ -365,7 +365,7 @@ class _MetricsSummaryRow extends StatelessWidget {
             ),
           if (m.cardioAcwr > 0)
             _Badge(
-              label: '유산소 ACWR',
+              label: '심폐 부하 비율',
               value: m.cardioAcwr.toStringAsFixed(2),
               highlight:
                   m.cardioAcwr > ReportConstants.cardioAcwrSweetSpotMax,
