@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:health/health.dart';
 
 import '../constants/cardio_source.dart';
@@ -10,6 +11,21 @@ import '../domain/health/health_workout_labels.dart';
 import '../domain/health/heart_rate_stats.dart';
 import '../domain/health/cardio_remote_sync.dart';
 import '../domain/repositories/cardio_history_repository.dart';
+
+/// 건강 동기화 중 [MissingPluginException](네이티브 플러그인 미등록 등) 시 사용자에게 보여줄 문구.
+const String kHealthPluginMissingUserMessage =
+    '건강 연동 모듈이 연결되지 않았습니다. 앱을 완전히 종료한 뒤 다시 실행하거나, 앱 삭제 후 재설치해 주세요.';
+
+/// [syncCardioFromHealth]의 예외를 결과로 변환한다. 단위 테스트용.
+@visibleForTesting
+HealthCardioSyncResult healthCardioSyncFailureFromError(Object e, StackTrace st) {
+  if (e is MissingPluginException) {
+    debugPrint('HealthCardioSyncRepositoryImpl (MissingPluginException): $e\n$st');
+    return HealthCardioSyncResult.failure(kHealthPluginMissingUserMessage);
+  }
+  debugPrint('HealthCardioSyncRepositoryImpl: $e\n$st');
+  return HealthCardioSyncResult.failure('동기화에 실패했습니다: $e');
+}
 
 /// [Health] 패키지를 사용하는 [HealthCardioSyncRepository] 구현.
 class HealthCardioSyncRepositoryImpl implements HealthCardioSyncRepository {
@@ -42,8 +58,14 @@ class HealthCardioSyncRepositoryImpl implements HealthCardioSyncRepository {
       await _health.configure();
 
       if (defaultTargetPlatform == TargetPlatform.android) {
-        final available = await _health.isHealthConnectAvailable();
-        if (!available) {
+        final sdkStatus = await _health.getHealthConnectSdkStatus();
+        if (sdkStatus == HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired) {
+          return HealthCardioSyncResult.failure(
+            '이 기기의 Health Connect(헬스 커넥트)가 업데이트가 필요합니다. '
+            '설정에서 시스템 업데이트를 확인하거나 Play 스토어에서 시스템 구성 요소·헬스 커넥트를 업데이트한 뒤 다시 시도해 주세요.',
+          );
+        }
+        if (sdkStatus != HealthConnectSdkStatus.sdkAvailable) {
           return HealthCardioSyncResult.failure(
             'Health Connect를 사용할 수 없습니다. Play 스토어에서 설치한 뒤 다시 시도해 주세요.',
           );
@@ -130,8 +152,7 @@ class HealthCardioSyncRepositoryImpl implements HealthCardioSyncRepository {
 
       return HealthCardioSyncResult.ok(rows.length);
     } catch (e, st) {
-      debugPrint('HealthCardioSyncRepositoryImpl: $e\n$st');
-      return HealthCardioSyncResult.failure('동기화에 실패했습니다: $e');
+      return healthCardioSyncFailureFromError(e, st);
     }
   }
 

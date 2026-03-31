@@ -1,5 +1,9 @@
 package com.example.gains_and_guide
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+/**
+ * The `health` plugin registers Health Connect permissions with
+ * `ComponentActivity.registerForActivityResult`, which needs [FlutterFragmentActivity].
+ */
+class MainActivity : FlutterFragmentActivity()
