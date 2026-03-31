@@ -78,6 +78,14 @@ class WeeklyReport {
           .map((k, v) => MapEntry(k, v.toJson())),
       'exerciseDeltas':
           metrics.exerciseDeltas.map((d) => d.toJson()).toList(),
+      'totalCardioSessions': metrics.totalCardioSessions,
+      'totalCardioMinutes': metrics.totalCardioMinutes,
+      'totalCardioDistance': metrics.totalCardioDistance,
+      'totalCardioCalories': metrics.totalCardioCalories,
+      'cardioAcwr': metrics.cardioAcwr,
+      'prevWeekCardioLoad': metrics.prevWeekCardioLoad,
+      'acuteCardioLoad': metrics.acuteCardioLoad,
+      'avgCardioRpe': metrics.avgCardioRpe,
     };
     return jsonEncode(map);
   }
@@ -115,6 +123,14 @@ class WeeklyReport {
       failureRate: (map['failureRate'] as num?)?.toDouble() ?? 0,
       prevWeekVolume: (map['prevWeekVolume'] as num?)?.toDouble(),
       exerciseDeltas: exerciseDeltas,
+      totalCardioSessions: map['totalCardioSessions'] as int? ?? 0,
+      totalCardioMinutes: (map['totalCardioMinutes'] as num?)?.toDouble() ?? 0,
+      totalCardioDistance: (map['totalCardioDistance'] as num?)?.toDouble() ?? 0,
+      totalCardioCalories: (map['totalCardioCalories'] as num?)?.toDouble() ?? 0,
+      cardioAcwr: (map['cardioAcwr'] as num?)?.toDouble() ?? 0,
+      prevWeekCardioLoad: (map['prevWeekCardioLoad'] as num?)?.toDouble(),
+      acuteCardioLoad: (map['acuteCardioLoad'] as num?)?.toDouble() ?? 0,
+      avgCardioRpe: (map['avgCardioRpe'] as num?)?.toDouble() ?? 0,
     );
 
     return WeeklyReport(

@@ -1,4 +1,5 @@
 import 'package:gains_and_guide/core/database/database_helper.dart';
+import 'package:gains_and_guide/core/domain/repositories/cardio_history_repository.dart';
 import 'package:gains_and_guide/core/domain/repositories/progression_repository.dart';
 import 'package:gains_and_guide/core/domain/repositories/workout_history_repository.dart';
 import 'package:gains_and_guide/features/routine/application/workout_service.dart';
@@ -25,6 +26,7 @@ class FakeWorkoutService extends WorkoutService {
       : super(
           RoutineRepository(DatabaseHelper.instance),
           _NoopHistoryRepo(),
+          _NoopCardioRepo(),
           _NoopProgressionRepo(),
         );
 
@@ -112,6 +114,21 @@ class _NoopHistoryRepo implements WorkoutHistoryRepository {
 
   @override
   Future<List<double>> getWeeklyVolumes(int weekCount) async => [];
+}
+
+class _NoopCardioRepo implements CardioHistoryRepository {
+  @override
+  Future<void> saveCardioHistory(List<Map<String, dynamic>> rows) async {}
+
+  @override
+  Future<List<Map<String, dynamic>>> getHistoryForDateRange(
+    String startDate,
+    String endDate,
+  ) async =>
+      [];
+
+  @override
+  Future<List<double>> getWeeklyCardioLoads(int weekCount) async => [];
 }
 
 class _NoopProgressionRepo implements ProgressionRepository {

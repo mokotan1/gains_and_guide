@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gains_and_guide/core/auth/user_identity.dart';
 import 'package:gains_and_guide/core/domain/models/deload_recommendation.dart';
 import 'package:gains_and_guide/core/workout_provider.dart';
 import 'package:gains_and_guide/features/routine/domain/exercise.dart';
@@ -6,13 +7,18 @@ import 'package:gains_and_guide/features/routine/domain/exercise.dart';
 import '../mocks/fake_deload_service.dart';
 import '../mocks/fake_workout_service.dart';
 
+class _TestUserIdentity implements UserIdentity {
+  @override
+  String get userId => 'test_user';
+}
+
 /// 같은 날 SharedPreferences 세션 복원 시 DB 프로그레션과 무게를 맞추는 동작 검증.
 void main() {
   late FakeWorkoutService fakeService;
   late FakeDeloadService fakeDeload;
 
   Future<WorkoutNotifier> createNotifier() async {
-    final notifier = WorkoutNotifier(fakeService, fakeDeload);
+    final notifier = WorkoutNotifier(fakeService, fakeDeload, _TestUserIdentity());
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);

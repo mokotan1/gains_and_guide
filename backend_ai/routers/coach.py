@@ -192,6 +192,7 @@ def _chat_prompt_tier(
             skip_rag=False,
             include_routine_guide=True,
             include_catalog=True,
+            chat_context=body.context,
         )
         field_cap = _long_text_field_cap()
     elif tier == 1:
@@ -202,6 +203,7 @@ def _chat_prompt_tier(
             skip_rag=False,
             include_routine_guide=True,
             include_catalog=True,
+            chat_context=body.context,
         )
         field_cap = _COMPACT_LONG_FIELD_MAX_CHARS
     else:
@@ -212,6 +214,7 @@ def _chat_prompt_tier(
             skip_rag=True,
             include_routine_guide=False,
             include_catalog=False,
+            chat_context=body.context,
         )
         system_prompt += _CHAT_EMERGENCY_JSON_SUFFIX
         field_cap = _EMERGENCY_CONTEXT_MAX_CHARS
@@ -277,6 +280,7 @@ def _build_chat_system_base(
     skip_rag: bool = False,
     include_routine_guide: bool = True,
     include_catalog: bool = True,
+    chat_context: str = "",
 ) -> str:
     if not app_deps.assets:
         raise HTTPException(status_code=500, detail="프롬프트 자산이 로드되지 않았습니다.")
@@ -289,7 +293,20 @@ def _build_chat_system_base(
         s += _rag_reference_appendix(
             user_message, user_subject, rag_snippet_max=rag_snippet_max
         )
+    s = _append_cardio_analysis_guide(s, chat_context)
     return s
+
+
+def _append_cardio_analysis_guide(system_prompt: str, chat_context: str) -> str:
+    """주간 레포트 등 컨텍스트에 유산소 블록이 있으면 유산소 전용 지침을 시스템에 병합한다."""
+    if "[유산소 운동 데이터]" not in chat_context:
+        return system_prompt
+    if not app_deps.assets:
+        return system_prompt
+    cap = (app_deps.assets.cardio_analysis_prompt or "").strip()
+    if not cap:
+        return system_prompt
+    return system_prompt + "\n\n[CARDIO_ANALYSIS_GUIDE]\n" + cap
 
 
 def _build_recommend_system_base(

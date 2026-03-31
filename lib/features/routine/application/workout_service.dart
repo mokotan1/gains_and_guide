@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/routine_repository.dart';
 import '../domain/exercise.dart';
 import '../domain/routine.dart';
+import '../../../core/domain/repositories/cardio_history_repository.dart';
 import '../../../core/domain/repositories/progression_repository.dart';
 import '../../../core/domain/repositories/workout_history_repository.dart';
 import '../../../core/providers/repository_providers.dart';
@@ -11,9 +12,15 @@ import '../../../core/providers/repository_providers.dart';
 class WorkoutService {
   final RoutineRepository _repository;
   final WorkoutHistoryRepository _historyRepo;
+  final CardioHistoryRepository _cardioHistoryRepo;
   final ProgressionRepository _progressionRepo;
 
-  WorkoutService(this._repository, this._historyRepo, this._progressionRepo);
+  WorkoutService(
+    this._repository,
+    this._historyRepo,
+    this._cardioHistoryRepo,
+    this._progressionRepo,
+  );
 
   static const String _sessionKey = 'current_workout_session';
   static const String _lastDateKey = 'last_session_date';
@@ -114,6 +121,9 @@ class WorkoutService {
   Future<void> saveWorkoutHistory(List<Map<String, dynamic>> historyData) =>
       _historyRepo.saveWorkoutHistory(historyData);
 
+  Future<void> saveCardioHistory(List<Map<String, dynamic>> rows) =>
+      _cardioHistoryRepo.saveCardioHistory(rows);
+
   Future<void> saveProgression(String name, double weight) =>
       _progressionRepo.saveProgression(name, weight);
 
@@ -125,6 +135,7 @@ final workoutServiceProvider = Provider<WorkoutService>((ref) {
   return WorkoutService(
     ref.watch(routineRepositoryProvider),
     ref.watch(workoutHistoryRepositoryProvider),
+    ref.watch(cardioHistoryRepositoryProvider),
     ref.watch(progressionRepositoryProvider),
   );
 });

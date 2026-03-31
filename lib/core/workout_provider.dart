@@ -2,14 +2,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/deload/application/deload_service.dart';
 import '../features/routine/domain/exercise.dart';
 import '../features/routine/application/workout_service.dart';
+import 'auth/user_identity.dart';
 import 'constants/workout_constants.dart';
 import 'domain/models/deload_recommendation.dart';
+import 'providers/repository_providers.dart';
 
 class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   final WorkoutService _service;
   final DeloadService _deloadService;
+  final UserIdentity _userIdentity;
 
-  WorkoutNotifier(this._service, this._deloadService) : super([]) {
+  WorkoutNotifier(this._service, this._deloadService, this._userIdentity)
+      : super([]) {
     _loadAllData();
   }
 
@@ -380,11 +384,31 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
   Future<void> saveCurrentWorkoutToHistory() async {
     final now = DateTime.now().toString().split(' ')[0];
-    final List<Map<String, dynamic>> historyData = [];
+    final List<Map<String, dynamic>> weightHistory = [];
+    final List<Map<String, dynamic>> cardioRows = [];
     final isDeloadSession = (deloadRecommendation?.shouldDeload ?? false) ||
         await _deloadService.isCurrentlyInDeload();
 
     for (var ex in state) {
+      if (ex.isCardio) {
+        for (int i = 0; i < ex.sets; i++) {
+          if (!ex.setStatus[i]) continue;
+          final int rpe = ex.setRpe[i] ?? WorkoutConstants.defaultRpe;
+          final double durationMinutes =
+              (ex.setReps[i] > 0 ? ex.setReps[i] : ex.reps).toDouble();
+          cardioRows.add({
+            'user_id': _userIdentity.userId,
+            'cardio_name': ex.name,
+            'duration_minutes': durationMinutes,
+            'distance_km': null,
+            'calories': null,
+            'rpe': rpe.toDouble(),
+            'date': now,
+          });
+        }
+        continue;
+      }
+
       int successSets = 0;
       int countBelow3 = 0;
       int countBelow8 = 0;
@@ -401,7 +425,7 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
           if (rpe < WorkoutConstants.rpeThresholdForHalfIncrement) countBelow8++;
         }
 
-        historyData.add({
+        weightHistory.add({
           'name': ex.name,
           'sets': i + 1,
           'reps': ex.setReps[i],
@@ -414,7 +438,7 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
       final isDeloading = deloadRecommendation?.shouldDeload ?? false;
       final hasFailures = ex.failedSetCount > 0;
-      if (successSets > 0 && !ex.isCardio && !isDeloading && !hasFailures) {
+      if (successSets > 0 && !isDeloading && !hasFailures) {
         final double maxSetWeight = ex.setWeights
             .asMap().entries
             .where((e) => ex.setStatus[e.key] && !ex.setFailed[e.key])
@@ -430,9 +454,14 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
       }
     }
 
-    if (historyData.isNotEmpty) {
-      await _service.saveWorkoutHistory(historyData);
+    if (weightHistory.isNotEmpty) {
+      await _service.saveWorkoutHistory(weightHistory);
+    }
+    if (cardioRows.isNotEmpty) {
+      await _service.saveCardioHistory(cardioRows);
+    }
 
+    if (weightHistory.isNotEmpty || cardioRows.isNotEmpty) {
       // DB에 활성 디로드가 있으면 반드시 차감 (notifier 플래그와 불일치해도 동작)
       if (await _deloadService.isCurrentlyInDeload()) {
         await _deloadService.completeDeloadSession();
@@ -452,5 +481,6 @@ final workoutProvider =
 StateNotifierProvider<WorkoutNotifier, List<Exercise>>((ref) {
   final service = ref.watch(workoutServiceProvider);
   final deloadService = ref.watch(deloadServiceProvider);
-  return WorkoutNotifier(service, deloadService);
+  final userIdentity = ref.watch(userIdentityProvider);
+  return WorkoutNotifier(service, deloadService, userIdentity);
 });

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gains_and_guide/core/constants/report_constants.dart';
 import 'package:gains_and_guide/features/weekly_report/domain/models/report_section.dart';
 import 'package:gains_and_guide/features/weekly_report/domain/models/weekly_metrics.dart';
 import 'package:gains_and_guide/features/weekly_report/domain/weekly_report_generator.dart';
@@ -17,6 +18,12 @@ void main() {
     double failureRate = 0,
     double? prevWeekVolume = 4500,
     List<ExerciseWeeklyDelta> exerciseDeltas = const [],
+    int totalCardioSessions = 0,
+    double totalCardioMinutes = 0,
+    double totalCardioDistance = 0,
+    double cardioAcwr = 0,
+    double acuteCardioLoad = 0,
+    double avgCardioRpe = 0,
   }) =>
       WeeklyMetrics(
         weekStart: weekStart,
@@ -30,6 +37,12 @@ void main() {
         failureRate: failureRate,
         prevWeekVolume: prevWeekVolume,
         exerciseDeltas: exerciseDeltas,
+        totalCardioSessions: totalCardioSessions,
+        totalCardioMinutes: totalCardioMinutes,
+        totalCardioDistance: totalCardioDistance,
+        cardioAcwr: cardioAcwr,
+        acuteCardioLoad: acuteCardioLoad,
+        avgCardioRpe: avgCardioRpe,
       );
 
   // ---------------------------------------------------------------------------
@@ -40,6 +53,38 @@ void main() {
       final report = WeeklyReportGenerator.generate(_metrics(totalSessions: 0));
       expect(report.headline.severity, InsightSeverity.neutral);
       expect(report.headline.text, contains('기록이 없습니다'));
+    });
+
+    test('웨이트 없이 유산소만 충분하면 positive headline', () {
+      final report = WeeklyReportGenerator.generate(_metrics(
+        totalSessions: 0,
+        totalVolume: 0,
+        avgRpe: 0,
+        acwr: 0,
+        prevWeekVolume: null,
+        totalCardioSessions: 3,
+        totalCardioMinutes: 160,
+        cardioAcwr: 1.0,
+        acuteCardioLoad: 800,
+        avgCardioRpe: 5,
+      ));
+      expect(report.headline.severity, InsightSeverity.positive);
+      expect(report.headline.text, contains('유산소'));
+    });
+
+    test('유산소 ACWR 위험 시 critical headline (웨이트 없음)', () {
+      final report = WeeklyReportGenerator.generate(_metrics(
+        totalSessions: 0,
+        totalVolume: 0,
+        acwr: 0,
+        prevWeekVolume: null,
+        totalCardioSessions: 2,
+        totalCardioMinutes: 120,
+        cardioAcwr: ReportConstants.cardioAcwrDangerMax + 0.1,
+        acuteCardioLoad: 900,
+        avgCardioRpe: 7,
+      ));
+      expect(report.headline.severity, InsightSeverity.critical);
     });
 
     test('ACWR > 1.5 → critical headline', () {
@@ -137,6 +182,19 @@ void main() {
       expect(consistency, isEmpty);
     });
 
+    test('유산소 150분 이상이면 WHO 인사이트', () {
+      final report = WeeklyReportGenerator.generate(_metrics(
+        totalCardioMinutes: 150,
+        totalCardioSessions: 2,
+        acuteCardioLoad: 750,
+        avgCardioRpe: 5,
+      ));
+      final who = report.performances
+          .where((p) => p.title.contains('심혈관'))
+          .toList();
+      expect(who, isNotEmpty);
+    });
+
     test('무게 증가 운동이 exerciseDeltas 에 있으면 Praise', () {
       final report = WeeklyReportGenerator.generate(_metrics(
         exerciseDeltas: [
@@ -162,7 +220,7 @@ void main() {
     test('ACWR > 1.3 → ACWR 과부하 경고 포함', () {
       final report = WeeklyReportGenerator.generate(_metrics(acwr: 1.35));
       final acwrW = report.warnings
-          .where((w) => w.title.contains('ACWR'))
+          .where((w) => w.title == 'ACWR 과부하 경고')
           .toList();
       expect(acwrW, isNotEmpty);
       expect(acwrW.first.metricValue, 1.35);
@@ -171,7 +229,7 @@ void main() {
     test('ACWR > 1.5 → critical severity', () {
       final report = WeeklyReportGenerator.generate(_metrics(acwr: 1.6));
       final acwrW = report.warnings
-          .firstWhere((w) => w.title.contains('ACWR'));
+          .firstWhere((w) => w.title == 'ACWR 과부하 경고');
       expect(acwrW.severity, InsightSeverity.critical);
     });
 
@@ -220,10 +278,10 @@ void main() {
       expect(imbalance, isEmpty);
     });
 
-    test('ACWR <= 1.3 이면 ACWR 경고 없음', () {
+    test('ACWR <= 1.3 이면 웨이트 ACWR 경고 없음', () {
       final report = WeeklyReportGenerator.generate(_metrics(acwr: 1.2));
       final acwrW = report.warnings
-          .where((w) => w.title.contains('ACWR'))
+          .where((w) => w.title == 'ACWR 과부하 경고')
           .toList();
       expect(acwrW, isEmpty);
     });

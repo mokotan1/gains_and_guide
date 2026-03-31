@@ -4,6 +4,7 @@ import 'package:http/testing.dart' as http_testing;
 
 import 'package:gains_and_guide/core/auth/user_identity.dart';
 import 'package:gains_and_guide/core/config/app_config.dart';
+import 'package:gains_and_guide/core/domain/repositories/cardio_history_repository.dart';
 import 'package:gains_and_guide/core/domain/repositories/exercise_catalog_repository.dart';
 import 'package:gains_and_guide/core/domain/repositories/workout_history_repository.dart';
 import 'package:gains_and_guide/core/network/api_client.dart';
@@ -73,6 +74,29 @@ class FakeWorkoutHistoryRepository implements WorkoutHistoryRepository {
   }
 }
 
+class FakeCardioHistoryRepository implements CardioHistoryRepository {
+  List<Map<String, dynamic>> rows = [];
+
+  @override
+  Future<void> saveCardioHistory(List<Map<String, dynamic>> history) async {}
+
+  @override
+  Future<List<Map<String, dynamic>>> getHistoryForDateRange(
+    String startDate,
+    String endDate,
+  ) async {
+    return rows.where((r) {
+      final date = (r['date'] as String).substring(0, 10);
+      return date.compareTo(startDate) >= 0 && date.compareTo(endDate) <= 0;
+    }).toList();
+  }
+
+  @override
+  Future<List<double>> getWeeklyCardioLoads(int weekCount) async {
+    return List.filled(weekCount, 100.0);
+  }
+}
+
 class FakeExerciseCatalogRepository implements ExerciseCatalogRepository {
   List<Map<String, dynamic>> catalogRows = [];
 
@@ -121,6 +145,7 @@ class FakeWeeklyReportRepository implements WeeklyReportRepository {
 
 void main() {
   late FakeWorkoutHistoryRepository historyRepo;
+  late FakeCardioHistoryRepository cardioRepo;
   late FakeExerciseCatalogRepository catalogRepo;
   late FakeWeeklyReportRepository reportRepo;
   late RoutineRecommendationService routineRecService;
@@ -135,6 +160,7 @@ void main() {
 
   setUp(() {
     historyRepo = FakeWorkoutHistoryRepository();
+    cardioRepo = FakeCardioHistoryRepository();
     catalogRepo = FakeExerciseCatalogRepository();
     reportRepo = FakeWeeklyReportRepository();
     final failingHttp = http_testing.MockClient((_) async {
@@ -149,6 +175,7 @@ void main() {
     );
     service = WeeklyReportService(
       historyRepo,
+      cardioRepo,
       catalogRepo,
       reportRepo,
       routineRecService,
@@ -180,6 +207,15 @@ void main() {
         _row(name: '스쿼트', weight: 100, reps: 5, rpe: 9, date: '2026-03-24'),
         _row(name: '벤치프레스', weight: 80, reps: 5, rpe: 8, date: '2026-03-26'),
       ];
+      cardioRepo.rows = [
+        {
+          'cardio_name': '러닝',
+          'duration_minutes': 30.0,
+          'rpe': 6.0,
+          'date': '2026-03-24',
+          'distance_km': 3.0,
+        },
+      ];
       catalogRepo.catalogRows = [
         {'name': '스쿼트', 'primary_muscles': 'quadriceps'},
         {'name': '벤치프레스', 'primary_muscles': 'chest'},
@@ -190,6 +226,7 @@ void main() {
       expect(report.metrics.totalSessions, greaterThan(0));
       expect(report.metrics.totalVolume, greaterThan(0));
       expect(report.metrics.volumeByMuscle, isNotEmpty);
+      expect(report.metrics.totalCardioMinutes, greaterThan(0));
     });
 
     test('두 번째 호출 시 캐시에서 반환한다', () async {
@@ -268,6 +305,7 @@ void main() {
       );
       service = WeeklyReportService(
         lowChronicRepo,
+        cardioRepo,
         catalogRepo,
         reportRepo,
         routineRecService,

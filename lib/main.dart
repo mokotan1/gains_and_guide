@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_background/flutter_background.dart';
@@ -20,15 +21,19 @@ void main() async {
   final appConfig = AppConfig.fromEnvironment();
   await AuthSession.instance.initialize(appConfig);
 
-  final androidConfig = FlutterBackgroundAndroidConfig(
-    notificationTitle: "Gains & Guide",
-    notificationText: "운동 타이머가 백그라운드에서 실행 중입니다.",
-    notificationImportance: AndroidNotificationImportance.normal,
-    notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
-  );
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    final androidConfig = FlutterBackgroundAndroidConfig(
+      notificationTitle: "Gains & Guide",
+      notificationText: "운동 타이머가 백그라운드에서 실행 중입니다.",
+      notificationImportance: AndroidNotificationImportance.normal,
+      notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
+    );
 
-  await FlutterBackground.initialize(androidConfig: androidConfig);
-  await FlutterBackground.enableBackgroundExecution();
+    final ok = await FlutterBackground.initialize(androidConfig: androidConfig);
+    if (ok) {
+      await FlutterBackground.enableBackgroundExecution();
+    }
+  }
 
   runApp(const ProviderScope(child: MyApp()));
 }

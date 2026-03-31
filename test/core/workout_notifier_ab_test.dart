@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gains_and_guide/core/auth/user_identity.dart';
 import 'package:gains_and_guide/core/constants/workout_constants.dart';
 import 'package:gains_and_guide/core/domain/models/deload_recommendation.dart';
 import 'package:gains_and_guide/core/workout_provider.dart';
@@ -6,6 +7,11 @@ import 'package:gains_and_guide/features/routine/domain/exercise.dart';
 
 import '../mocks/fake_deload_service.dart';
 import '../mocks/fake_workout_service.dart';
+
+class _TestUserIdentity implements UserIdentity {
+  @override
+  String get userId => 'test_user';
+}
 
 /// [WorkoutNotifier] 의 Stronglifts A/B 루틴 교체 로직을 검증한다.
 ///
@@ -31,7 +37,7 @@ void main() {
 
   /// notifier 를 생성하고 비동기 초기화(_loadAllData)가 완료되기를 기다린다.
   Future<WorkoutNotifier> createNotifier() async {
-    final notifier = WorkoutNotifier(fakeService, fakeDeload);
+    final notifier = WorkoutNotifier(fakeService, fakeDeload, _TestUserIdentity());
     // _loadAllData()는 constructor에서 fire-and-forget으로 실행되므로
     // microtask 큐를 비워 비동기 초기화를 완료시킨다.
     await Future<void>.delayed(Duration.zero);

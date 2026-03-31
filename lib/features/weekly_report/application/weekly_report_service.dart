@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/user_identity.dart';
 import '../../../core/constants/report_constants.dart';
+import '../../../core/domain/repositories/cardio_history_repository.dart';
 import '../../../core/domain/repositories/exercise_catalog_repository.dart';
 import '../../../core/domain/repositories/workout_history_repository.dart';
 import '../../../core/error/app_exception.dart';
@@ -22,6 +23,7 @@ import 'routine_recommendation_service.dart';
 /// 4) 규칙 기반 레포트 생성 → 5) (선택) AI 보강 → 6) 저장 후 반환.
 class WeeklyReportService {
   final WorkoutHistoryRepository _historyRepo;
+  final CardioHistoryRepository _cardioHistoryRepo;
   final ExerciseCatalogRepository _catalogRepo;
   final WeeklyReportRepository _reportRepo;
   final RoutineRecommendationService _routineRecommendationService;
@@ -30,6 +32,7 @@ class WeeklyReportService {
 
   WeeklyReportService(
     this._historyRepo,
+    this._cardioHistoryRepo,
     this._catalogRepo,
     this._reportRepo,
     this._routineRecommendationService, {
@@ -76,8 +79,10 @@ class WeeklyReportService {
 
       final data = await _apiClient.post('/chat', {
         'user_id': _userIdentity.userId,
-        'message': '주간 운동 레포트 데이터를 분석해서 '
-            '한국어로 코치 입장에서 한 줄 요약과 핵심 조언을 해줘.',
+        'message': '사용자의 주간 웨이트 트레이닝 데이터와 유산소 데이터를 종합적으로 분석해줘. '
+            '1. 근력 성장에 대한 칭찬/경고 '
+            '2. 유산소 훈련량 평가 및 웨이트와의 밸런스 '
+            '이 두 가지를 포함해서 코치 입장에서 한국어로 핵심 조언을 해줘.',
         'context': summary,
       });
 
@@ -156,11 +161,21 @@ class WeeklyReportService {
       ReportConstants.chronicWindowWeeks,
     );
 
+    final currentCardioRows = await _cardioHistoryRepo.getHistoryForDateRange(
+      mondayStr,
+      sundayStr,
+    );
+    final chronicCardioLoads = await _cardioHistoryRepo.getWeeklyCardioLoads(
+      ReportConstants.chronicWindowWeeks,
+    );
+
     final muscleMap = await _buildMuscleMap();
 
     final metrics = WeeklyMetricsCalculator.calculate(
       currentWeekRows: currentWeekRows,
+      currentCardioRows: currentCardioRows,
       chronicWeeklyVolumes: chronicVolumes,
+      chronicWeeklyCardioLoads: chronicCardioLoads,
       prevWeekRows: prevWeekRows,
       muscleMap: muscleMap,
       weekStart: monday,
@@ -210,6 +225,18 @@ class WeeklyReportService {
       buf.writeln();
     }
 
+    buf
+      ..writeln('')
+      ..writeln('[유산소 운동 데이터]')
+      ..writeln('유산소 세션(일수): ${metrics.totalCardioSessions}회')
+      ..writeln('총 유산소 시간: ${metrics.totalCardioMinutes.toStringAsFixed(0)}분')
+      ..writeln('총 거리: ${metrics.totalCardioDistance.toStringAsFixed(1)}km')
+      ..writeln('총 칼로리(기록 시): ${metrics.totalCardioCalories.toStringAsFixed(0)}')
+      ..writeln('유산소 평균 RPE: ${metrics.avgCardioRpe.toStringAsFixed(1)}')
+      ..writeln(
+          '유산소 급성 부하(분×RPE): ${metrics.acuteCardioLoad.toStringAsFixed(0)}')
+      ..writeln('유산소 ACWR: ${metrics.cardioAcwr.toStringAsFixed(2)}');
+
     return buf.toString();
   }
 
@@ -235,6 +262,7 @@ final routineRecommendationServiceProvider =
 final weeklyReportServiceProvider = Provider<WeeklyReportService>((ref) {
   return WeeklyReportService(
     ref.watch(workoutHistoryRepositoryProvider),
+    ref.watch(cardioHistoryRepositoryProvider),
     ref.watch(exerciseCatalogRepositoryProvider),
     ref.watch(weeklyReportRepositoryProvider),
     ref.watch(routineRecommendationServiceProvider),

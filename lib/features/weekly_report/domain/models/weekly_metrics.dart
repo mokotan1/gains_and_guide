@@ -24,6 +24,25 @@ class WeeklyMetrics {
   /// 운동별 주간 무게 변동
   final List<ExerciseWeeklyDelta> exerciseDeltas;
 
+  /// 유산소: 고유 날짜 수 (세션 수)
+  final int totalCardioSessions;
+
+  final double totalCardioMinutes;
+  final double totalCardioDistance;
+  final double totalCardioCalories;
+
+  /// 유산소 급성 부하 ACWR (시간×RPE 부하 / 최근 N주 평균)
+  final double cardioAcwr;
+
+  /// 롤링 윈도우 기준 직전 주 유산소 부하 (비교용, 없으면 null)
+  final double? prevWeekCardioLoad;
+
+  /// 이번 주 유산소 급성 부하 합계 Σ(분 × max(RPE, 1))
+  final double acuteCardioLoad;
+
+  /// 유산소 세트 평균 RPE (데이터 없으면 0)
+  final double avgCardioRpe;
+
   const WeeklyMetrics({
     required this.weekStart,
     required this.weekEnd,
@@ -36,12 +55,26 @@ class WeeklyMetrics {
     required this.failureRate,
     this.prevWeekVolume,
     this.exerciseDeltas = const [],
+    this.totalCardioSessions = 0,
+    this.totalCardioMinutes = 0,
+    this.totalCardioDistance = 0,
+    this.totalCardioCalories = 0,
+    this.cardioAcwr = 0,
+    this.prevWeekCardioLoad,
+    this.acuteCardioLoad = 0,
+    this.avgCardioRpe = 0,
   });
 
   /// 볼륨 주간 증감률 (%). prevWeekVolume 이 없으면 null.
   double? get volumeChangePercent {
     if (prevWeekVolume == null || prevWeekVolume == 0) return null;
     return ((totalVolume - prevWeekVolume!) / prevWeekVolume!) * 100;
+  }
+
+  /// 유산소 부하 주간 증감률 (%)
+  double? get cardioLoadChangePercent {
+    if (prevWeekCardioLoad == null || prevWeekCardioLoad == 0) return null;
+    return ((acuteCardioLoad - prevWeekCardioLoad!) / prevWeekCardioLoad!) * 100;
   }
 
   static final _epoch = DateTime.fromMillisecondsSinceEpoch(0);
@@ -57,7 +90,15 @@ class WeeklyMetrics {
         estimated1RMs = const {},
         failureRate = 0,
         prevWeekVolume = null,
-        exerciseDeltas = const [];
+        exerciseDeltas = const [],
+        totalCardioSessions = 0,
+        totalCardioMinutes = 0,
+        totalCardioDistance = 0,
+        totalCardioCalories = 0,
+        cardioAcwr = 0,
+        prevWeekCardioLoad = null,
+        acuteCardioLoad = 0,
+        avgCardioRpe = 0;
 }
 
 /// 운동별 예상 1RM (Epley 공식 기반)

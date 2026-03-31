@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/constants/report_constants.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/workout_provider.dart';
 import '../../routine/domain/exercise.dart';
@@ -267,7 +268,8 @@ class _WeeklyReportScreenState extends ConsumerState<WeeklyReportScreen> {
 
           // 루틴 추천 버튼
           if (report.recommendedRoutine == null &&
-              report.metrics.totalSessions > 0)
+              (report.metrics.totalSessions > 0 ||
+                  report.metrics.totalCardioSessions > 0))
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: OutlinedButton.icon(
@@ -323,26 +325,50 @@ class _MetricsSummaryRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _Badge(label: '훈련', value: '${m.totalSessions}회'),
-          _Badge(
-            label: '볼륨',
-            value: '${(m.totalVolume / 1000).toStringAsFixed(1)}t',
-          ),
-          _Badge(
-            label: 'RPE',
-            value: m.avgRpe.toStringAsFixed(1),
-          ),
+          if (m.totalSessions > 0) _Badge(label: '훈련', value: '${m.totalSessions}회'),
+          if (m.totalVolume > 0)
+            _Badge(
+              label: '볼륨',
+              value: '${(m.totalVolume / 1000).toStringAsFixed(1)}t',
+            ),
+          if (m.totalSessions > 0)
+            _Badge(
+              label: 'RPE',
+              value: m.avgRpe.toStringAsFixed(1),
+            ),
           if (m.acwr > 0)
             _Badge(
               label: 'ACWR',
               value: m.acwr.toStringAsFixed(2),
-              highlight: m.acwr > 1.3,
+              highlight: m.acwr > ReportConstants.acwrSweetSpotMax,
             ),
           if (m.volumeChangePercent != null)
             _Badge(
               label: '볼륨 변화',
               value: '${m.volumeChangePercent! >= 0 ? '+' : ''}'
                   '${m.volumeChangePercent!.toStringAsFixed(1)}%',
+            ),
+          if (m.totalCardioSessions > 0)
+            _Badge(
+              label: '유산소',
+              value: '${m.totalCardioSessions}일',
+            ),
+          if (m.totalCardioMinutes > 0)
+            _Badge(
+              label: '유산소 분',
+              value: '${m.totalCardioMinutes.toStringAsFixed(0)}분',
+            ),
+          if (m.totalCardioDistance > 0)
+            _Badge(
+              label: '거리',
+              value: '${m.totalCardioDistance.toStringAsFixed(1)}km',
+            ),
+          if (m.cardioAcwr > 0)
+            _Badge(
+              label: '유산소 ACWR',
+              value: m.cardioAcwr.toStringAsFixed(2),
+              highlight:
+                  m.cardioAcwr > ReportConstants.cardioAcwrSweetSpotMax,
             ),
         ],
       ),

@@ -15,6 +15,7 @@ class PromptAssets:
     system_prompt: str
     routine_system_prompt: str
     routine_guide_text: str
+    cardio_analysis_prompt: str
 
 
 def load_prompt_assets(base_dir: str) -> PromptAssets:
@@ -54,10 +55,23 @@ def load_prompt_assets(base_dir: str) -> PromptAssets:
         )
         logger.warning("⚠️ routine_persona.txt를 찾지 못해 기본 페르소나를 사용합니다.")
 
+    cardio_prompt_path = os.path.join(base_dir, "cardio_persona.txt")
+    try:
+        with open(cardio_prompt_path, "r", encoding="utf-8") as f:
+            cardio_analysis_prompt = f.read()
+        logger.info("✅ cardio_persona.txt를 로드했습니다.")
+    except FileNotFoundError:
+        cardio_analysis_prompt = (
+            "당신은 심폐지구력 및 유산소 훈련 전문가입니다. "
+            "사용자의 유산소 볼륨(시간/거리)과 웨이트 훈련의 간섭 효과를 고려하여 조언하세요."
+        )
+        logger.warning("⚠️ cardio_persona.txt를 찾지 못해 기본 유산소 페르소나를 사용합니다.")
+
     return PromptAssets(
         system_prompt=system_prompt,
         routine_system_prompt=routine_system_prompt,
         routine_guide_text=routine_guide_text,
+        cardio_analysis_prompt=cardio_analysis_prompt,
     )
 
 

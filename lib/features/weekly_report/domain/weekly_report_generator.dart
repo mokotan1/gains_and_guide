@@ -34,9 +34,29 @@ class WeeklyReportGenerator {
   // ---------------------------------------------------------------------------
 
   static ReportHeadline _buildHeadline(WeeklyMetrics metrics) {
-    if (metrics.totalSessions == 0) {
+    if (metrics.totalSessions == 0 && metrics.totalCardioSessions == 0) {
       return const ReportHeadline(
         text: '이번 주는 운동 기록이 없습니다. 다음 주에 다시 시작해봐요!',
+        severity: InsightSeverity.neutral,
+      );
+    }
+
+    if (metrics.totalSessions == 0 && metrics.totalCardioSessions > 0) {
+      if (metrics.cardioAcwr > ReportConstants.cardioAcwrDangerMax) {
+        return const ReportHeadline(
+          text: '유산소 부하가 과도할 수 있습니다. 회복과 강도를 점검해보세요.',
+          severity: InsightSeverity.critical,
+        );
+      }
+      if (metrics.totalCardioMinutes >=
+          ReportConstants.whoWeeklyModerateCardioMinutes) {
+        return const ReportHeadline(
+          text: '유산소 위주로 꾸준히 움직인 한 주였습니다!',
+          severity: InsightSeverity.positive,
+        );
+      }
+      return const ReportHeadline(
+        text: '유산소 훈련을 이어가고 있습니다. 필요하면 시간을 조금씩 늘려보세요.',
         severity: InsightSeverity.neutral,
       );
     }
@@ -122,6 +142,18 @@ class WeeklyReportGenerator {
       ));
     }
 
+    // WHO 권장 주간 중강도 유산소 (150분)
+    if (metrics.totalCardioMinutes >=
+        ReportConstants.whoWeeklyModerateCardioMinutes) {
+      results.add(PerformanceInsight(
+        title: '심혈관 건강의 정석',
+        description:
+            '이번 주 유산소 운동 ${metrics.totalCardioMinutes.toStringAsFixed(0)}분을 달성하여 '
+            '주간 권장량(${ReportConstants.whoWeeklyModerateCardioMinutes.toStringAsFixed(0)}분)을 채웠습니다!',
+        severity: InsightSeverity.positive,
+      ));
+    }
+
     // 무게 증가 운동
     for (final delta in metrics.exerciseDeltas) {
       final kg = delta.deltaKg;
@@ -191,6 +223,24 @@ class WeeklyReportGenerator {
 
     // 근육군 불균형
     _detectMuscleImbalance(metrics).forEach(results.add);
+
+    // 유산소 ACWR 과부하 (웨이트 ACWR과 분리)
+    if (metrics.cardioAcwr > ReportConstants.cardioAcwrSweetSpotMax) {
+      final severity = metrics.cardioAcwr > ReportConstants.cardioAcwrDangerMax
+          ? InsightSeverity.critical
+          : InsightSeverity.warning;
+      results.add(WarningInsight(
+        title: '유산소 부하 ACWR 경고',
+        description:
+            '유산소 급성 부하 대비 만성 평균 비율이 '
+            '${metrics.cardioAcwr.toStringAsFixed(2)}로 '
+            '권장 상한(${ReportConstants.cardioAcwrSweetSpotMax})을 넘었습니다. '
+            '전체 피로·회복을 점검하세요.',
+        severity: severity,
+        metricValue: metrics.cardioAcwr,
+        threshold: ReportConstants.cardioAcwrSweetSpotMax,
+      ));
+    }
 
     return results;
   }
@@ -284,6 +334,17 @@ class WeeklyReportGenerator {
         rationale:
             'ACWR ${metrics.acwr.toStringAsFixed(2)}로 훈련 볼륨이 '
             '평소보다 낮아 자극이 부족할 수 있습니다.',
+        priority: priority++,
+      ));
+    }
+
+    // 유산소 과부하 → 강도·시간 조절
+    if (metrics.cardioAcwr > ReportConstants.cardioAcwrSweetSpotMax) {
+      results.add(ActionItem(
+        instruction: '유산소는 시간이나 강도(RPE) 중 하나를 낮추고, 수면·영양으로 회복을 보강하세요.',
+        rationale:
+            '유산소 ACWR ${metrics.cardioAcwr.toStringAsFixed(2)}로 '
+            '심폐 부하가 한동안의 평균보다 큽니다.',
         priority: priority++,
       ));
     }

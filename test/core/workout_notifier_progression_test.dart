@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gains_and_guide/core/auth/user_identity.dart';
 import 'package:gains_and_guide/core/constants/workout_constants.dart';
 import 'package:gains_and_guide/core/domain/models/deload_recommendation.dart';
 import 'package:gains_and_guide/core/workout_provider.dart';
@@ -6,6 +7,11 @@ import 'package:gains_and_guide/features/routine/domain/exercise.dart';
 
 import '../mocks/fake_deload_service.dart';
 import '../mocks/fake_workout_service.dart';
+
+class _TestUserIdentity implements UserIdentity {
+  @override
+  String get userId => 'test_user';
+}
 
 /// [WorkoutNotifier.saveCurrentWorkoutToHistory] 의 증량 규칙을 검증한다.
 ///
@@ -49,7 +55,7 @@ void main() {
   setUp(() {
     fakeService = FakeWorkoutService();
     fakeDeload = FakeDeloadService();
-    notifier = WorkoutNotifier(fakeService, fakeDeload);
+    notifier = WorkoutNotifier(fakeService, fakeDeload, _TestUserIdentity());
   });
 
   group('saveCurrentWorkoutToHistory - 증량 규칙', () {

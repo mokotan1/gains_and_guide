@@ -68,4 +68,18 @@ class ReportConstants {
 
   /// 액션 아이템에서 권장하는 목표 RPE
   static const double recommendedTargetRpe = 8.0;
+
+  // ---------------------------------------------------------------------------
+  // 유산소 (WHO 가이드라인 · 급성 부하 ACWR 분리)
+  // ---------------------------------------------------------------------------
+
+  /// WHO 권장 주간 중강도 유산소 (분)
+  static const double whoWeeklyModerateCardioMinutes = 150.0;
+
+  /// 유산소 급성 부하 ACWR — 언더트레이닝 상한 (웨이트와 동일 스케일을 쓰지 않아도 됨)
+  static const double cardioAcwrUndertraining = 0.8;
+
+  static const double cardioAcwrSweetSpotMax = 1.3;
+
+  static const double cardioAcwrDangerMax = 1.5;
 }

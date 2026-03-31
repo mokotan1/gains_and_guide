@@ -10,22 +10,26 @@ import 'models/weekly_metrics.dart';
 class WeeklyMetricsCalculator {
   WeeklyMetricsCalculator._();
 
-  /// workout_history 행 리스트와 부가 정보로부터 [WeeklyMetrics] 를 산출한다.
+  /// workout_history / cardio_history 행으로부터 [WeeklyMetrics] 를 산출한다.
   ///
-  /// - [currentWeekRows] : 이번 주 workout_history 행 (name, sets, reps, weight, rpe, date)
-  /// - [chronicWeeklyVolumes] : 최근 N주간의 주별 총 볼륨 리스트 (최신순, 이번 주 제외)
-  /// - [prevWeekRows] : 지난 주 workout_history 행 (1RM·무게 비교용)
-  /// - [muscleMap] : 운동명 → 주요 근육군 매핑 (exercise_catalog 에서 추출)
-  /// - [weekStart], [weekEnd] : 이번 주 시작/종료 날짜
+  /// - [currentWeekRows] : 이번 주 workout_history (웨이트만)
+  /// - [currentCardioRows] : 이번 주 cardio_history
+  /// - [chronicWeeklyVolumes] / [chronicWeeklyCardioLoads] : 최근 N주 (최신순, 이번 주 제외)
+  /// - [prevWeekRows] : 지난 주 workout_history
   static WeeklyMetrics calculate({
     required List<Map<String, dynamic>> currentWeekRows,
+    required List<Map<String, dynamic>> currentCardioRows,
     required List<double> chronicWeeklyVolumes,
+    required List<double> chronicWeeklyCardioLoads,
     required List<Map<String, dynamic>> prevWeekRows,
     required Map<String, String> muscleMap,
     required DateTime weekStart,
     required DateTime weekEnd,
   }) {
-    if (currentWeekRows.isEmpty) {
+    final weightEmpty = currentWeekRows.isEmpty;
+    final cardioEmpty = currentCardioRows.isEmpty;
+
+    if (weightEmpty && cardioEmpty) {
       return WeeklyMetrics(
         weekStart: weekStart,
         weekEnd: weekEnd,
@@ -39,6 +43,53 @@ class WeeklyMetricsCalculator {
         prevWeekVolume:
             chronicWeeklyVolumes.isNotEmpty ? chronicWeeklyVolumes.first : null,
         exerciseDeltas: const [],
+        prevWeekCardioLoad: chronicWeeklyCardioLoads.isNotEmpty
+            ? chronicWeeklyCardioLoads.first
+            : null,
+      );
+    }
+
+    final totalCardioSessions =
+        cardioEmpty ? 0 : _countUniqueDates(currentCardioRows);
+    final double totalCardioMinutes =
+        cardioEmpty ? 0.0 : _totalCardioMinutes(currentCardioRows);
+    final double totalCardioDistance =
+        cardioEmpty ? 0.0 : _totalCardioDistance(currentCardioRows);
+    final double totalCardioCalories =
+        cardioEmpty ? 0.0 : _totalCardioCalories(currentCardioRows);
+    final double avgCardioRpe =
+        cardioEmpty ? 0.0 : _averageCardioRpe(currentCardioRows);
+    final double acuteCardioLoad =
+        cardioEmpty ? 0.0 : _acuteCardioLoad(currentCardioRows);
+    final double cardioAcwr = cardioEmpty
+        ? 0.0
+        : _calculateAcwr(acuteCardioLoad, chronicWeeklyCardioLoads);
+    final prevWeekCardioLoad = chronicWeeklyCardioLoads.isNotEmpty
+        ? chronicWeeklyCardioLoads.first
+        : null;
+
+    if (weightEmpty) {
+      return WeeklyMetrics(
+        weekStart: weekStart,
+        weekEnd: weekEnd,
+        totalSessions: 0,
+        totalVolume: 0,
+        avgRpe: 0,
+        acwr: 0,
+        volumeByMuscle: const {},
+        estimated1RMs: const {},
+        failureRate: 0,
+        prevWeekVolume:
+            chronicWeeklyVolumes.isNotEmpty ? chronicWeeklyVolumes.first : null,
+        exerciseDeltas: const [],
+        totalCardioSessions: totalCardioSessions,
+        totalCardioMinutes: totalCardioMinutes,
+        totalCardioDistance: totalCardioDistance,
+        totalCardioCalories: totalCardioCalories,
+        cardioAcwr: cardioAcwr,
+        prevWeekCardioLoad: prevWeekCardioLoad,
+        acuteCardioLoad: acuteCardioLoad,
+        avgCardioRpe: avgCardioRpe,
       );
     }
 
@@ -73,6 +124,14 @@ class WeeklyMetricsCalculator {
       failureRate: failureRate,
       prevWeekVolume: prevWeekVolume,
       exerciseDeltas: exerciseDeltas,
+      totalCardioSessions: totalCardioSessions,
+      totalCardioMinutes: totalCardioMinutes,
+      totalCardioDistance: totalCardioDistance,
+      totalCardioCalories: totalCardioCalories,
+      cardioAcwr: cardioAcwr,
+      prevWeekCardioLoad: prevWeekCardioLoad,
+      acuteCardioLoad: acuteCardioLoad,
+      avgCardioRpe: avgCardioRpe,
     );
   }
 
@@ -88,12 +147,15 @@ class WeeklyMetricsCalculator {
   static double averageRpe(List<Map<String, dynamic>> rows) =>
       _averageRpe(rows);
 
-  /// ACWR 산출
+  /// ACWR 산출 (웨이트 볼륨 또는 유산소 급성 부하)
   static double calculateAcwr(
     double acuteVolume,
     List<double> chronicWeeklyVolumes,
   ) =>
       _calculateAcwr(acuteVolume, chronicWeeklyVolumes);
+
+  static double acuteCardioLoad(List<Map<String, dynamic>> rows) =>
+      _acuteCardioLoad(rows);
 
   /// Epley 공식으로 1RM 추정: weight × (1 + reps / 30)
   static double epley1RM(double weight, int reps) {
@@ -233,4 +295,42 @@ class WeeklyMetricsCalculator {
 
   static double _round1(double value) =>
       (value * 10).roundToDouble() / 10;
+
+  static double _totalCardioMinutes(List<Map<String, dynamic>> rows) {
+    return rows.fold(0.0, (sum, row) {
+      return sum + ((row['duration_minutes'] as num?)?.toDouble() ?? 0);
+    });
+  }
+
+  static double _totalCardioDistance(List<Map<String, dynamic>> rows) {
+    return rows.fold(0.0, (sum, row) {
+      return sum + ((row['distance_km'] as num?)?.toDouble() ?? 0);
+    });
+  }
+
+  static double _totalCardioCalories(List<Map<String, dynamic>> rows) {
+    return rows.fold(0.0, (sum, row) {
+      return sum + ((row['calories'] as num?)?.toDouble() ?? 0);
+    });
+  }
+
+  static double _averageCardioRpe(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return 0;
+    final rpes = rows
+        .map((r) => (r['rpe'] as num?)?.toDouble())
+        .where((r) => r != null)
+        .cast<double>()
+        .toList();
+    if (rpes.isEmpty) return 0;
+    return rpes.reduce((a, b) => a + b) / rpes.length;
+  }
+
+  static double _acuteCardioLoad(List<Map<String, dynamic>> rows) {
+    return rows.fold(0.0, (sum, row) {
+      final dm = (row['duration_minutes'] as num?)?.toDouble() ?? 0;
+      final r = (row['rpe'] as num?)?.toDouble() ?? 0;
+      final rpe = r < 1 ? 1.0 : r;
+      return sum + dm * rpe;
+    });
+  }
 }

@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     return await openDatabase(
       join(dbPath, filePath),
-      version: 13,
+      version: 14,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: (db) async {
@@ -60,6 +60,22 @@ class DatabaseHelper {
     await _createDeloadHistoryTable(db);
     await _createWeeklyReportsTable(db);
     await _createUserProfileTable(db);
+    await _createCardioHistoryTable(db);
+  }
+
+  Future _createCardioHistoryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cardio_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        cardio_name TEXT NOT NULL,
+        duration_minutes REAL NOT NULL,
+        distance_km REAL,
+        calories REAL,
+        rpe REAL,
+        date TEXT NOT NULL
+      )
+    ''');
   }
 
   Future _createWeeklyReportsTable(Database db) async {
@@ -260,6 +276,9 @@ class DatabaseHelper {
         ALTER TABLE workout_history
         ADD COLUMN is_deload INTEGER NOT NULL DEFAULT 0
       ''');
+    }
+    if (oldVersion < 14) {
+      await _createCardioHistoryTable(db);
     }
   }
 
@@ -706,6 +725,56 @@ class DatabaseHelper {
 
       final volume = (rows.first['volume'] as num?)?.toDouble() ?? 0;
       results.add(volume);
+    }
+    return results;
+  }
+
+  /// 유산소 기록 일괄 저장
+  Future<void> saveCardioHistory(List<Map<String, dynamic>> rows) async {
+    final db = await instance.database;
+    final batch = db.batch();
+    for (final r in rows) {
+      batch.insert('cardio_history', r);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// 날짜 범위 내 유산소 기록 (주간 레포트용)
+  Future<List<Map<String, dynamic>>> getCardioHistoryForDateRange(
+    String startDate,
+    String endDate,
+  ) async {
+    final db = await instance.database;
+    return db.rawQuery('''
+      SELECT * FROM cardio_history
+      WHERE SUBSTR(date, 1, 10) >= ? AND SUBSTR(date, 1, 10) <= ?
+      ORDER BY date ASC
+    ''', [startDate, endDate]);
+  }
+
+  /// 최근 N주간의 주별 유산소 급성 부하 합계 (duration_minutes × max(rpe,1)) — 최신순, 이번 주 제외
+  /// [getWeeklyVolumes] 와 동일한 롤링 주간 윈도우.
+  Future<List<double>> getWeeklyCardioLoads(int weekCount) async {
+    final db = await instance.database;
+    final now = DateTime.now();
+
+    final results = <double>[];
+    for (int i = 1; i <= weekCount; i++) {
+      final weekEnd = now.subtract(Duration(days: 7 * i - (7 - now.weekday % 7)));
+      final weekStart = weekEnd.subtract(const Duration(days: 6));
+      final startStr = _dateStr(weekStart);
+      final endStr = _dateStr(weekEnd);
+
+      final rows = await db.rawQuery('''
+        SELECT COALESCE(SUM(
+          duration_minutes * (CASE WHEN COALESCE(rpe, 0) < 1 THEN 1.0 ELSE rpe END)
+        ), 0) AS load_sum
+        FROM cardio_history
+        WHERE SUBSTR(date, 1, 10) >= ? AND SUBSTR(date, 1, 10) <= ?
+      ''', [startStr, endStr]);
+
+      final load = (rows.first['load_sum'] as num?)?.toDouble() ?? 0;
+      results.add(load);
     }
     return results;
   }

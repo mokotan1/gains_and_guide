@@ -39,6 +39,7 @@ class TestCoachTpmTiers(unittest.TestCase):
             system_prompt="You are a coach.",
             routine_system_prompt="Routine coach.",
             routine_guide_text="",
+            cardio_analysis_prompt="Cardio expert.",
         )
 
         with patch.object(coach_mod.app_deps, "assets", assets):

@@ -126,7 +126,9 @@ void main() {
     test('빈 데이터일 때 안전하게 빈 메트릭스를 반환한다', () {
       final metrics = WeeklyMetricsCalculator.calculate(
         currentWeekRows: [],
+        currentCardioRows: [],
         chronicWeeklyVolumes: [],
+        chronicWeeklyCardioLoads: [],
         prevWeekRows: [],
         muscleMap: {},
         weekStart: weekStart,
@@ -160,7 +162,9 @@ void main() {
 
       final metrics = WeeklyMetricsCalculator.calculate(
         currentWeekRows: currentRows,
+        currentCardioRows: [],
         chronicWeeklyVolumes: [2000, 1900, 1800, 1700],
+        chronicWeeklyCardioLoads: [],
         prevWeekRows: prevRows,
         muscleMap: muscleMap,
         weekStart: weekStart,
@@ -207,7 +211,9 @@ void main() {
 
       final metrics = WeeklyMetricsCalculator.calculate(
         currentWeekRows: rows,
+        currentCardioRows: [],
         chronicWeeklyVolumes: [2000],
+        chronicWeeklyCardioLoads: [],
         prevWeekRows: [],
         muscleMap: {},
         weekStart: weekStart,
@@ -229,7 +235,9 @@ void main() {
 
       final metrics = WeeklyMetricsCalculator.calculate(
         currentWeekRows: current,
+        currentCardioRows: [],
         chronicWeeklyVolumes: [],
+        chronicWeeklyCardioLoads: [],
         prevWeekRows: prev,
         muscleMap: {},
         weekStart: weekStart,
@@ -241,6 +249,72 @@ void main() {
       expect(delta.thisWeekMaxWeight, 105);
       expect(delta.lastWeekMaxWeight, 100);
       expect(delta.deltaKg, 5);
+    });
+
+    test('유산소만 있을 때 주간 유산소 지표가 채워진다', () {
+      final cardioRows = [
+        {
+          'cardio_name': '러닝',
+          'duration_minutes': 60.0,
+          'rpe': 6.0,
+          'date': '2026-03-24',
+          'distance_km': 5.0,
+        },
+        {
+          'cardio_name': '사이클',
+          'duration_minutes': 45.0,
+          'rpe': 5.0,
+          'date': '2026-03-26',
+        },
+      ];
+
+      final metrics = WeeklyMetricsCalculator.calculate(
+        currentWeekRows: [],
+        currentCardioRows: cardioRows,
+        chronicWeeklyVolumes: [],
+        chronicWeeklyCardioLoads: [400, 400, 400, 400],
+        prevWeekRows: [],
+        muscleMap: {},
+        weekStart: weekStart,
+        weekEnd: weekEnd,
+      );
+
+      expect(metrics.totalSessions, 0);
+      expect(metrics.totalCardioSessions, 2);
+      expect(metrics.totalCardioMinutes, 105);
+      expect(metrics.totalCardioDistance, 5);
+      expect(metrics.acuteCardioLoad, 60 * 6 + 45 * 5);
+      expect(metrics.cardioAcwr, closeTo(585 / 400, 0.001));
+    });
+
+    test('웨이트+유산소 혼합 시 양쪽 ACWR이 독립적으로 계산된다', () {
+      final currentRows = [
+        _row(name: '스쿼트', weight: 100, reps: 5, date: '2026-03-24'),
+      ];
+      final cardioRows = [
+        {
+          'cardio_name': '걷기',
+          'duration_minutes': 30.0,
+          'rpe': 5.0,
+          'date': '2026-03-24',
+        },
+      ];
+
+      final metrics = WeeklyMetricsCalculator.calculate(
+        currentWeekRows: currentRows,
+        currentCardioRows: cardioRows,
+        chronicWeeklyVolumes: [500],
+        chronicWeeklyCardioLoads: [150, 150, 150, 150],
+        prevWeekRows: [],
+        muscleMap: {'스쿼트': 'quadriceps'},
+        weekStart: weekStart,
+        weekEnd: weekEnd,
+      );
+
+      expect(metrics.totalSessions, 1);
+      expect(metrics.acwr, closeTo(500 / 500, 0.01));
+      expect(metrics.acuteCardioLoad, 150);
+      expect(metrics.cardioAcwr, closeTo(150 / 150, 0.01));
     });
   });
 }
