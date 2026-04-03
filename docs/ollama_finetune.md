@@ -75,6 +75,13 @@ AI 에이전트는 Colab 계정에 접속하거나 셀을 대신 실행할 수 *
 - [`notebooks/colab_gains_coach_sft.ipynb`](../notebooks/colab_gains_coach_sft.ipynb) 를 Colab에 업로드한 뒤, GPU 런타임으로 순서대로 실행하세요.
 - 로컬에서 만든 `gains_coach_sft_sharegpt.json` 을 노트북의 업로드 셀에서 선택합니다.
 
+**Colab에서 `CalledProcessError` / `llamafactory-cli` exit code 1**
+
+- 노트북 학습 셀은 실패 시 **stdout/stderr 마지막 구간**을 한 번 더 출력합니다. 그 위쪽 로그에 실제 원인(데이터 경로, 템플릿 이름, OOM, HF 403 등)이 나옵니다.
+- 무료 런타임의 **T4**에서는 `bf16: true` 조합이 환경에 따라 바로 실패할 수 있어, 노트북 YAML은 **`fp16: true`, `bf16: false`**, `cutoff_len: 2048` 을 기본으로 둡니다. A100/L4 등이면 `bf16`/`fp16`을 바꿀 수 있습니다.
+- **`GatedRepoError` / 403 / “not in the authorized list”** 는 Hugging Face **게이트 모델**(예: `meta-llama/Llama-3.2-3B-Instruct`)에 **접근 승인이 안 된 계정**이거나, 승인은 됐는데 **다른 계정의 토큰**으로 `login` 한 경우입니다. 해결: [해당 모델 페이지](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct)에서 신청·승인 후 **그 계정** 토큰으로 로그인. 또는 노트북 기본처럼 **게이트 없는 베이스**(예: `Qwen/Qwen2.5-3B-Instruct`, `template: qwen`)로 학습합니다.
+- VRAM 부족이면 `per_device_train_batch_size`·`cutoff_len`·`lora_rank`를 더 낮추거나, 더 작은 instruct 모델로 `model_name_or_path`만 교체해 원인 분리를 합니다.
+
 ## 4. LLaMA-Factory (클라우드 GPU / 로컬)
 
 1. [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) 클론 후 `pip install -e ".[torch,metrics]"`
@@ -90,7 +97,7 @@ llamafactory-cli train backend_ai/finetune/llamafactory/gains_coach_sft.yaml
 
 (실제 CLI는 LLaMA-Factory 버전에 따라 `llamafactory-cli` 또는 `python src/train.py` 일 수 있음 — 공식 README 확인)
 
-베이스 모델 예: `meta-llama/Llama-3.2-3B-Instruct` (라이선스·HF 로그인 필요)
+베이스 모델 예: `Qwen/Qwen2.5-3B-Instruct` + `template: qwen`(게이트 없음, Colab 기본과 동일). Llama를 쓰려면 `meta-llama/Llama-3.2-3B-Instruct` + `template: llama3` 이며 **HF에서 모델 접근 승인 + 승인 계정 토큰**이 필요합니다(미승인 시 403).
 
 ## 5. GGUF 변환 및 Ollama
 

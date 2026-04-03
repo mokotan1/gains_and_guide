@@ -69,15 +69,17 @@ def _public_error_message(exc: BaseException) -> str:
     return "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
 
-# Groq 무료 티어 TPM 초과 시 단계적 축소 (0=기본, 1=컴팩트, 2=비상: RAG·가이드·카탈로그 생략)
+# Groq 무료/on_demand: TPM·요청 과대(413) 시 단계적 축소 (0=기본, 1=컴팩트, 2=비상: RAG·가이드·카탈로그 생략)
 _COMPACT_RAG_SNIPPET_CHARS = 200
 _COMPACT_LONG_FIELD_MAX_CHARS = 2000
 _EMERGENCY_CONTEXT_MAX_CHARS = 800
 _EMERGENCY_MAX_COMPLETION_TOKENS = 384
-# on_demand: 전체 카탈로그 JSON만 수천 토큰 — 티어별 문자 상한으로 주입량 제한
-_DEFAULT_CATALOG_CHARS_TIER0 = 10_000
-_DEFAULT_CATALOG_CHARS_TIER1 = 5_000
-_DEFAULT_COACH_CONTEXT_CHARS = 3_000
+# on_demand: 전체 카탈로그·컨텍스트가 입력 토큰을 쉽게 채움 — 티어별 문자 상한
+_DEFAULT_CATALOG_CHARS_TIER0 = 7_500
+_DEFAULT_CATALOG_CHARS_TIER1 = 3_500
+_DEFAULT_COACH_CONTEXT_CHARS = 2_200
+_DEFAULT_COACH_USER_MESSAGE_CHARS = 3_500
+_DEFAULT_RAG_QUERY_CHARS = 2_500
 
 _CHAT_EMERGENCY_JSON_SUFFIX = (
     "\n\n[출력]\n오직 JSON 한 객체: {\"response\": string, \"routine\": object|null, "
@@ -98,6 +100,43 @@ def _long_text_field_cap() -> int | None:
         return max(200, int(raw))
     except ValueError:
         return max(200, _DEFAULT_COACH_CONTEXT_CHARS)
+
+
+def _user_message_max_chars() -> int:
+    raw = os.getenv("COACH_USER_MESSAGE_MAX_CHARS", "").strip()
+    if not raw:
+        return max(200, _DEFAULT_COACH_USER_MESSAGE_CHARS)
+    try:
+        return max(200, int(raw))
+    except ValueError:
+        return max(200, _DEFAULT_COACH_USER_MESSAGE_CHARS)
+
+
+def _rag_query_max_chars() -> int:
+    raw = os.getenv("COACH_RAG_QUERY_MAX_CHARS", "").strip()
+    if not raw:
+        return max(200, _DEFAULT_RAG_QUERY_CHARS)
+    try:
+        return max(200, int(raw))
+    except ValueError:
+        return max(200, _DEFAULT_RAG_QUERY_CHARS)
+
+
+def _truncate_chat_request(body: ChatRequest) -> ChatRequest:
+    cap = _user_message_max_chars()
+    if len(body.message) <= cap:
+        return body
+    t = body.message[: max(1, cap - 24)].rstrip() + "\n...[truncated]"
+    if hasattr(body, "model_copy"):
+        return body.model_copy(update={"message": t})
+    return body.copy(update={"message": t})  # type: ignore[no-any-return, union-attr]
+
+
+def _truncate_rag_query(q: str) -> str:
+    cap = _rag_query_max_chars()
+    if len(q) <= cap:
+        return q
+    return q[: max(1, cap - 20)].rstrip() + "\n...[truncated]"
 
 
 def _catalog_injection_max_chars(tier: int) -> int | None:
@@ -175,6 +214,52 @@ def _is_groq_tpm_rate_limit(exc: BaseException) -> bool:
     return False
 
 
+def _groq_error_text(exc: BaseException) -> str:
+    parts: list[str] = [str(exc)]
+    b = getattr(exc, "body", None)
+    if isinstance(b, dict):
+        try:
+            parts.append(json.dumps(b, ensure_ascii=False))
+        except (TypeError, ValueError):
+            parts.append(repr(b))
+    elif isinstance(b, str):
+        parts.append(b)
+    return " ".join(parts).lower()
+
+
+def _is_groq_request_too_large(exc: BaseException) -> bool:
+    """
+    요청 본문/컨텍스트가 커서 실패한 경우(순수 413, context length 등).
+    Groq는 TPM 한도를 413+rate_limit으로 주기도 하고, 페이로드 과대만으로 413이 나기도 한다.
+    """
+    if isinstance(exc, APIStatusError):
+        if exc.status_code == 413 and not _groq_body_rate_limit_exceeded(
+            getattr(exc, "body", None)
+        ):
+            return True
+        if exc.status_code == 400:
+            blob = _groq_error_text(exc)
+            if "context_length" in blob or "context length" in blob:
+                return True
+            if "token" in blob and (
+                "too many" in blob
+                or "maximum" in blob
+                or "exceed" in blob
+                or "reduce" in blob
+            ):
+                return True
+            if "request too large" in blob or "payload too large" in blob:
+                return True
+    cause = getattr(exc, "__cause__", None)
+    if cause is not None and cause is not exc:
+        return _is_groq_request_too_large(cause)
+    return False
+
+
+def _should_shrink_prompt_and_retry(exc: BaseException) -> bool:
+    return _is_groq_tpm_rate_limit(exc) or _is_groq_request_too_large(exc)
+
+
 def _emergency_completion_cap() -> int:
     return max(256, min(_EMERGENCY_MAX_COMPLETION_TOKENS, groq_max_completion_tokens()))
 
@@ -192,7 +277,7 @@ def _invoke_legacy_chat_resolving_tpm(
             return _legacy_chat_completion(client, sp, uc, max_completion_tokens=mt)
         except Exception as e:
             last_err = e
-            if not _is_groq_tpm_rate_limit(e):
+            if not _should_shrink_prompt_and_retry(e):
                 raise
             if tier == 2:
                 logger.error("Groq TPM persists after tier-2 minimal prompt")
@@ -203,7 +288,10 @@ def _invoke_legacy_chat_resolving_tpm(
                         "짧은 메시지로 요청해 주세요."
                     ),
                 ) from e
-            logger.warning("Groq TPM/rate limit — legacy retry tier %s", tier + 1)
+            logger.warning(
+                "Groq prompt limit — legacy retry tier %s (TPM or oversized request)",
+                tier + 1,
+            )
     raise RuntimeError("legacy TPM loop exhausted") from last_err
 
 
@@ -271,12 +359,13 @@ def _rag_reference_appendix(
     if not app_deps.rag:
         return ""
     try:
+        q = _truncate_rag_query(query)
         cfg = hybrid_rag_config_from_env()
         user_ns = user_vector_namespace(user_subject)
         corp_ns = _corpus_namespace()
         corpus_chunks, user_chunks = retrieve_corpus_and_user(
             app_deps.rag,
-            query,
+            q,
             user_namespace=user_ns,
             cfg=cfg,
             corpus_namespace=corp_ns,
@@ -487,6 +576,7 @@ def _recommend_messages(
 @router.post("/chat")
 @limiter.limit(_COACH_RATE_LIMIT)
 async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]:
+    body = _truncate_chat_request(body)
     user_subject = resolve_request_subject(request, body.user_id)
     if not app_deps.chat_completion_client:
         raise HTTPException(
@@ -526,14 +616,14 @@ async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]
         try:
             parsed = await _run_agent_with_timeout(sp, uc)
         except Exception as e:
-            if _is_groq_tpm_rate_limit(e):
-                logger.warning("coach agent: TPM — tier 1")
+            if _should_shrink_prompt_and_retry(e):
+                logger.warning("coach agent: prompt/TPM limit — tier 1")
                 sp, uc = _chat_prompt_tier(body, user_subject, 1)
                 try:
                     parsed = await _run_agent_with_timeout(sp, uc)
                 except Exception as e2:
-                    if _is_groq_tpm_rate_limit(e2):
-                        logger.warning("coach agent: TPM — tier 2 minimal")
+                    if _should_shrink_prompt_and_retry(e2):
+                        logger.warning("coach agent: prompt/TPM limit — tier 2 minimal")
                         sp, uc = _chat_prompt_tier(body, user_subject, 2)
                         parsed = await _run_agent_with_timeout(sp, uc)
                     else:
@@ -645,10 +735,10 @@ async def recommend_routine(request: Request, body: RecommendRequest) -> dict[st
                 )
                 break
             except Exception as e:
-                if not _is_groq_tpm_rate_limit(e):
+                if not _should_shrink_prompt_and_retry(e):
                     raise
                 if tier == 2:
-                    logger.error("recommend: Groq TPM after tier-2 minimal prompt")
+                    logger.error("recommend: Groq limit after tier-2 minimal prompt")
                     raise HTTPException(
                         status_code=429,
                         detail=(
@@ -656,7 +746,9 @@ async def recommend_routine(request: Request, body: RecommendRequest) -> dict[st
                             "요약 길이를 줄여 주세요."
                         ),
                     ) from e
-                logger.warning("recommend: Groq TPM — retry tier %s", tier + 1)
+                logger.warning(
+                    "recommend: Groq prompt/TPM — retry tier %s", tier + 1
+                )
 
         if chat_completion is None:
             raise HTTPException(
