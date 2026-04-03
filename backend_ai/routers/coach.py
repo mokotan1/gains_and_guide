@@ -81,6 +81,11 @@ _DEFAULT_COACH_CONTEXT_CHARS = 2_200
 _DEFAULT_COACH_USER_MESSAGE_CHARS = 3_500
 _DEFAULT_RAG_QUERY_CHARS = 2_500
 
+# 대문자_언더스코어 괄호 이름은 Groq 등이 "도구 이름"으로 오인해 가짜 tool call을 낼 수 있음
+_CARDIO_GUIDE_SECTION_HEADER = (
+    "\n\n── 유산소·심폐 분석 참고(읽기 전용 안내 문단, 호출 가능한 도구·함수 아님) ──\n"
+)
+
 _CHAT_EMERGENCY_JSON_SUFFIX = (
     "\n\n[출력]\n오직 JSON 한 객체: {\"response\": string, \"routine\": object|null, "
     "\"progression\": array|null}. "
@@ -428,7 +433,7 @@ def _append_cardio_analysis_guide(system_prompt: str, chat_context: str) -> str:
     cap = (app_deps.assets.cardio_analysis_prompt or "").strip()
     if not cap:
         return system_prompt
-    return system_prompt + "\n\n[CARDIO_ANALYSIS_GUIDE]\n" + cap
+    return system_prompt + _CARDIO_GUIDE_SECTION_HEADER + cap
 
 
 def _build_recommend_system_base(

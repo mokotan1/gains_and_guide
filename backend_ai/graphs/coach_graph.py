@@ -22,7 +22,11 @@ DEFAULT_MODEL = groq_model_name()
 _JSON_FINAL_INSTRUCTION = (
     "도구가 더 필요 없으면, 최종 메시지는 오직 하나의 JSON 객체만 포함해야 한다. "
     '키: "response" (문자열), "routine" (객체 또는 null), "progression" (배열 또는 null). '
-    "마크다운 코드펜스나 추가 설명 없이 JSON만 출력한다."
+    "마크다운 코드펜스나 추가 설명 없이 JSON만 출력한다. "
+    "호출 가능한 도구는 calculate_1rm, match_exercise_catalog_name, build_progression_table_json "
+    "세 가지뿐이다. 시스템에 붙은 유산소 참고 문단은 읽기 전용 텍스트이며 도구가 아니다. "
+    "CARDIO_ANALYSIS_GUIDE 등 임의 이름으로 function/tool 호출을 만들거나 "
+    "<function=...> 형태를 출력하지 마라."
 )
 
 COACH_SCHEMA_RETRY_USER_SUFFIX = (
