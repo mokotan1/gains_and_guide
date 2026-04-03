@@ -1,21 +1,23 @@
 ---
-description: Superpowers MCP 또는 로컬 using-superpowers SKILL 필수 pre-flight (레포 공통)
+description: 매 사용자 메시지(매 턴)마다 Superpowers MCP 또는 using-superpowers SKILL Read 필수
 alwaysApply: true
 ---
 
-# Superpowers 필수
+# Superpowers 매 요청 필수
 
-전역 규칙과 동일합니다. 이 레포를 클론한 환경에서도 **항상** 적용되도록 둡니다.
+전역 규칙과 동일. **사용자 메시지마다** (이전 턴과 무관) 아래를 **응답 본문보다 먼저** 수행한다.
 
-## 절대 규칙
+## 순서
 
-코드·패치·실행 계획 전에:
+1. **MCP**: `superpowers_get_skill` → `using-superpowers` (최소 1회). 필요 시 추가 스킬.
+2. **MCP 없으면**: `Read`로  
+   `%USERPROFILE%\.cursor\plugins\local\superpowers\skills\using-superpowers\SKILL.md`  
+   또는 cache 경로의 동일 스킬 파일.
+3. 둘 다 실패 시에만 한 줄로 안내.
 
-1. **Superpowers MCP**가 있으면 `using-superpowers` 스킬을 도구로 로드하고, 작업에 맞는 추가 스킬을 호출합니다.
-2. MCP가 없으면 **Read**로 로컬 `using-superpowers/SKILL.md`를 읽습니다. Windows 예:
-   - `%USERPROFILE%\.cursor\plugins\local\superpowers\skills\using-superpowers\SKILL.md`
-   - 또는 cache 경로의 `cursor-public\superpowers\...\skills\using-superpowers\SKILL.md`
-3. 둘 다 불가하면 사용자에게 MCP/플러그인 활성화를 안내하고, 생략하지 않습니다.
+## 금지
 
-다른 레포에도 동일 규칙을 넣으려면 사용자 폴더의 스크립트를 실행하세요:  
-`& "$env:USERPROFILE\.cursor\scripts\copy-superpowers-rule.ps1"`
+- Superpowers 생략 후 답변·코드·패치
+- “짧은 질문이라 생략”
+
+복사: `& "$env:USERPROFILE\.cursor\scripts\copy-superpowers-rule.ps1"`
