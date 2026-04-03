@@ -13,8 +13,12 @@ from services.rag import RagService
 
 @dataclass
 class AppDependencies:
+    """chat_completion_client: Groq 또는 OpenAI SDK 인스턴스(Ollama 호환)."""
+
     groq_client: Optional[Groq] = None
     groq_api_key: Optional[str] = None
+    chat_completion_client: Any = None
+    llm_chat_provider: str = "none"
     assets: Optional[PromptAssets] = None
     rag: Optional[RagService] = None
     coach_agent: Any = None

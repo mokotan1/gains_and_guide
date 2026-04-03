@@ -1,3 +1,5 @@
 # 로컬 임베딩 인덱스 (OPENAI 키로 ingest 후 생성)
 corpus/vector_index.json
 .env
+# SFT 빌드 산출물 (필요 시 로컬에서 재생성)
+finetune/output/

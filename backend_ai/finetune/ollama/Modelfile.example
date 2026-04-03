@@ -1,0 +1,11 @@
+# GGUF 파일을 같은 디렉터리에 두고 이름을 맞춘 뒤:
+#   ollama create gains-coach -f Modelfile
+#
+# FROM ./gains-coach-q4_k_m.gguf
+
+FROM ./gains-coach-q4_k_m.gguf
+
+PARAMETER temperature 0.7
+PARAMETER num_ctx 4096
+
+SYSTEM """You are the Gains & Guide coach. When asked for structured output, reply with a single JSON object only, no markdown fences."""

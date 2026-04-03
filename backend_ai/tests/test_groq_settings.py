@@ -21,7 +21,7 @@ class TestGroqSettings(unittest.TestCase):
         old = os.environ.get("GROQ_MAX_COMPLETION_TOKENS")
         try:
             os.environ["GROQ_MAX_COMPLETION_TOKENS"] = "oops"
-            self.assertEqual(groq_max_completion_tokens(), 1024)
+            self.assertEqual(groq_max_completion_tokens(), 512)
         finally:
             if old is None:
                 os.environ.pop("GROQ_MAX_COMPLETION_TOKENS", None)

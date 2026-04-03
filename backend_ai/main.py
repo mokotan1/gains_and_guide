@@ -15,6 +15,7 @@ import prompts
 from graphs.coach_graph import build_coach_agent
 from rate_limits import limiter
 from services.groq_settings import groq_max_completion_tokens, groq_model_name
+from services.llm_completion import build_chat_completion_client
 from routers.auth import router as auth_router
 from routers.coach import router as coach_router
 from routers.memory import router as memory_router
@@ -33,11 +34,15 @@ app_deps.assets = prompts.load_prompt_assets(BASE_DIR)
 
 app_deps.rag = create_rag_service(BASE_DIR)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if GROQ_API_KEY:
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+chat_client, chat_provider = build_chat_completion_client()
+app_deps.chat_completion_client = chat_client
+app_deps.llm_chat_provider = chat_provider
+
+if chat_provider == "groq":
     app_deps.groq_api_key = GROQ_API_KEY
-    app_deps.groq_client = Groq(api_key=GROQ_API_KEY)
-    logger.info("✅ Groq API Key가 로드되었습니다. (Llama 3 활성화 완료)")
+    app_deps.groq_client = chat_client  # type: ignore[assignment]
+    logger.info("✅ LLM 채팅: Groq (%s)", groq_model_name())
     try:
         app_deps.coach_agent = build_coach_agent(
             GROQ_API_KEY,
@@ -46,11 +51,21 @@ if GROQ_API_KEY:
         )
         logger.info("✅ LangGraph 코치 에이전트(도구 호출) 준비 완료")
     except Exception as e:
-        logger.error("❌ 코치 에이전트 초기화 실패 — USE_LEGACY_CHAT 또는 키 확인: %s", e)
+        logger.error("❌ 코치 에이전트 초기화 실패 — USE_LEGACY_CHAT=1 권장: %s", e)
         app_deps.coach_agent = None
-else:
-    logger.error("❌ Groq API Key를 찾을 수 없습니다!")
+elif chat_provider == "openai_compat":
     app_deps.groq_client = None
+    app_deps.groq_api_key = None
+    app_deps.coach_agent = None
+    base = os.getenv("OPENAI_COMPAT_BASE_URL", "").strip()
+    logger.info("✅ LLM 채팅: OpenAI 호환 (%s)", base)
+    logger.warning(
+        "LangGraph 에이전트는 Groq 전용입니다. Ollama 사용 시 USE_LEGACY_CHAT=1 을 권장합니다."
+    )
+else:
+    logger.error("❌ LLM 미설정: GROQ_API_KEY 또는 LLM_CHAT_PROVIDER=openai_compat + OPENAI_COMPAT_BASE_URL")
+    app_deps.groq_client = None
+    app_deps.groq_api_key = None
     app_deps.coach_agent = None
 
 
@@ -85,6 +100,7 @@ def read_root(request: Request) -> dict:
             "rag_corpus": bool(app_deps.rag and app_deps.rag.chunk_count > 0),
             "rag_mode": getattr(app_deps.rag, "mode", "token"),
             "agent": app_deps.coach_agent is not None,
+            "llm_chat_provider": app_deps.llm_chat_provider,
             "auth_jwt": bool(os.getenv("AUTH_JWT_SECRET", "").strip()),
             "supabase_jwt": bool(
                 os.getenv("SUPABASE_JWKS_URL", "").strip()

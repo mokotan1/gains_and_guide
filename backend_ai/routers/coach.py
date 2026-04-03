@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from groq import APIError, APIStatusError, Groq
+from groq import APIError, APIStatusError
 from pydantic import BaseModel, ValidationError
 
 import catalog
@@ -19,7 +19,8 @@ from graphs.coach_graph import COACH_SCHEMA_RETRY_USER_SUFFIX, run_coach_agent
 from rate_limits import coach_rate_limit_string, limiter
 from services.coach_response_schema import CoachChatResponse, coerce_raw_coach_dict
 from routers.auth_deps import resolve_request_subject
-from services.groq_settings import groq_max_completion_tokens, groq_model_name
+from services.groq_settings import groq_max_completion_tokens
+from services.llm_completion import chat_completion_create
 from services.hybrid_retrieval import hybrid_rag_config_from_env, retrieve_corpus_and_user
 from services.rag import format_references
 from services.user_namespace import user_vector_namespace
@@ -73,6 +74,10 @@ _COMPACT_RAG_SNIPPET_CHARS = 200
 _COMPACT_LONG_FIELD_MAX_CHARS = 2000
 _EMERGENCY_CONTEXT_MAX_CHARS = 800
 _EMERGENCY_MAX_COMPLETION_TOKENS = 384
+# on_demand: 전체 카탈로그 JSON만 수천 토큰 — 티어별 문자 상한으로 주입량 제한
+_DEFAULT_CATALOG_CHARS_TIER0 = 10_000
+_DEFAULT_CATALOG_CHARS_TIER1 = 5_000
+_DEFAULT_COACH_CONTEXT_CHARS = 3_000
 
 _CHAT_EMERGENCY_JSON_SUFFIX = (
     "\n\n[출력]\n오직 JSON 한 객체: {\"response\": string, \"routine\": object|null, "
@@ -83,13 +88,52 @@ _CHAT_EMERGENCY_JSON_SUFFIX = (
 
 
 def _long_text_field_cap() -> int | None:
+    """과거 기록·주간 요약 등 사용자 컨텍스트 최대 길이. 미설정 시 기본 상한(토큰 예산)."""
     raw = os.getenv("COACH_LONG_FIELD_MAX_CHARS", "").strip().lower()
-    if not raw or raw in ("0", "none", "unlimited"):
+    if raw in ("0", "none", "unlimited"):
         return None
+    if not raw:
+        return max(200, _DEFAULT_COACH_CONTEXT_CHARS)
     try:
         return max(200, int(raw))
     except ValueError:
+        return max(200, _DEFAULT_COACH_CONTEXT_CHARS)
+
+
+def _catalog_injection_max_chars(tier: int) -> int | None:
+    """
+    운동 카탈로그 블록 최대 문자 수. None 이면 잘라내지 않음.
+    COACH_CATALOG_UNLIMITED=1 이면 항상 None.
+    """
+    if os.getenv("COACH_CATALOG_UNLIMITED", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
         return None
+    raw = os.getenv("COACH_CATALOG_MAX_CHARS", "").strip()
+    if raw:
+        try:
+            v = int(raw)
+            return None if v <= 0 else v
+        except ValueError:
+            pass
+    if tier >= 1:
+        return _DEFAULT_CATALOG_CHARS_TIER1
+    return _DEFAULT_CATALOG_CHARS_TIER0
+
+
+def _truncate_catalog_for_prompt(
+    catalog_text: str, max_chars: int | None
+) -> str:
+    if not catalog_text or not catalog_text.strip():
+        return catalog_text
+    if max_chars is None or len(catalog_text) <= max_chars:
+        return catalog_text
+    return (
+        catalog_text[: max(1, max_chars - 48)].rstrip()
+        + "\n...[catalog truncated for token budget]"
+    )
 
 
 def _truncate_coach_long_field(
@@ -131,40 +175,22 @@ def _is_groq_tpm_rate_limit(exc: BaseException) -> bool:
     return False
 
 
-def _groq_chat_completion_create(
-    client: Groq,
-    messages: list[dict[str, str]],
-    *,
-    max_completion_tokens: int | None = None,
-) -> Any:
-    cap = groq_max_completion_tokens()
-    if max_completion_tokens is not None:
-        cap = min(cap, max(256, max_completion_tokens))
-    return client.chat.completions.create(
-        messages=messages,
-        model=groq_model_name(),
-        temperature=0.7,
-        max_tokens=cap,
-        response_format={"type": "json_object"},
-    )
-
-
 def _emergency_completion_cap() -> int:
     return max(256, min(_EMERGENCY_MAX_COMPLETION_TOKENS, groq_max_completion_tokens()))
 
 
 def _invoke_legacy_chat_resolving_tpm(
-    client: Groq,
+    client: Any,
     get_prompts: Callable[[int], tuple[str, str]],
 ) -> dict[str, Any]:
     emergency_cap = _emergency_completion_cap()
-    last_err: APIError | None = None
+    last_err: BaseException | None = None
     for tier in (0, 1, 2):
         sp, uc = get_prompts(tier)
         mt = emergency_cap if tier == 2 else None
         try:
             return _legacy_chat_completion(client, sp, uc, max_completion_tokens=mt)
-        except APIError as e:
+        except Exception as e:
             last_err = e
             if not _is_groq_tpm_rate_limit(e):
                 raise
@@ -192,6 +218,7 @@ def _chat_prompt_tier(
             skip_rag=False,
             include_routine_guide=True,
             include_catalog=True,
+            catalog_max_chars=_catalog_injection_max_chars(0),
             chat_context=body.context,
         )
         field_cap = _long_text_field_cap()
@@ -203,6 +230,7 @@ def _chat_prompt_tier(
             skip_rag=False,
             include_routine_guide=True,
             include_catalog=True,
+            catalog_max_chars=_catalog_injection_max_chars(1),
             chat_context=body.context,
         )
         field_cap = _COMPACT_LONG_FIELD_MAX_CHARS
@@ -214,6 +242,7 @@ def _chat_prompt_tier(
             skip_rag=True,
             include_routine_guide=False,
             include_catalog=False,
+            catalog_max_chars=None,
             chat_context=body.context,
         )
         system_prompt += _CHAT_EMERGENCY_JSON_SUFFIX
@@ -280,6 +309,7 @@ def _build_chat_system_base(
     skip_rag: bool = False,
     include_routine_guide: bool = True,
     include_catalog: bool = True,
+    catalog_max_chars: int | None = None,
     chat_context: str = "",
 ) -> str:
     if not app_deps.assets:
@@ -288,7 +318,10 @@ def _build_chat_system_base(
     if include_routine_guide:
         s = prompts.append_routine_guide(s, app_deps.assets.routine_guide_text)
     if include_catalog:
-        s = prompts.append_catalog(s, catalog.exercise_catalog_text)
+        cat = _truncate_catalog_for_prompt(
+            catalog.exercise_catalog_text, catalog_max_chars
+        )
+        s = prompts.append_catalog(s, cat)
     if not skip_rag:
         s += _rag_reference_appendix(
             user_message, user_subject, rag_snippet_max=rag_snippet_max
@@ -317,6 +350,7 @@ def _build_recommend_system_base(
     skip_rag: bool = False,
     include_routine_guide: bool = True,
     include_catalog: bool = True,
+    catalog_max_chars: int | None = None,
 ) -> str:
     if not app_deps.assets:
         raise HTTPException(status_code=500, detail="프롬프트 자산이 로드되지 않았습니다.")
@@ -324,7 +358,10 @@ def _build_recommend_system_base(
     if include_routine_guide:
         s = prompts.append_routine_guide(s, app_deps.assets.routine_guide_text)
     if include_catalog:
-        s = prompts.append_catalog(s, catalog.exercise_catalog_text)
+        cat = _truncate_catalog_for_prompt(
+            catalog.exercise_catalog_text, catalog_max_chars
+        )
+        s = prompts.append_catalog(s, cat)
     if not skip_rag:
         s += _rag_reference_appendix(
             weekly_summary, user_subject, rag_snippet_max=rag_snippet_max
@@ -333,7 +370,7 @@ def _build_recommend_system_base(
 
 
 def _legacy_chat_completion(
-    client: Groq,
+    client: Any,
     system_prompt: str,
     user_content: str,
     *,
@@ -343,8 +380,11 @@ def _legacy_chat_completion(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
     ]
-    chat_completion = _groq_chat_completion_create(
-        client, messages, max_completion_tokens=max_completion_tokens
+    chat_completion = chat_completion_create(
+        client,
+        messages,
+        provider=app_deps.llm_chat_provider,
+        max_completion_tokens=max_completion_tokens,
     )
     reply = chat_completion.choices[0].message.content
     if not reply:
@@ -419,6 +459,7 @@ def _recommend_messages(
     summary = _truncate_coach_long_field(
         body.weekly_summary, override_cap=field_cap
     )
+    cat_limit = _catalog_injection_max_chars(tier) if icat else None
     system_prompt = _build_recommend_system_base(
         summary,
         user_subject,
@@ -426,6 +467,7 @@ def _recommend_messages(
         skip_rag=skip_rag,
         include_routine_guide=irg,
         include_catalog=icat,
+        catalog_max_chars=cat_limit,
     )
     if tier == 2:
         system_prompt += (
@@ -446,13 +488,16 @@ def _recommend_messages(
 @limiter.limit(_COACH_RATE_LIMIT)
 async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]:
     user_subject = resolve_request_subject(request, body.user_id)
-    if not app_deps.groq_client or not app_deps.groq_api_key:
-        raise HTTPException(status_code=500, detail="서버에 Groq API 키가 없습니다.")
+    if not app_deps.chat_completion_client:
+        raise HTTPException(
+            status_code=500,
+            detail="LLM 이 설정되지 않았습니다. GROQ_API_KEY 또는 OPENAI_COMPAT_BASE_URL 을 확인하세요.",
+        )
 
     if _use_legacy_chat() or not app_deps.coach_agent:
         try:
             raw = _invoke_legacy_chat_resolving_tpm(
-                app_deps.groq_client,
+                app_deps.chat_completion_client,
                 lambda t: _chat_prompt_tier(body, user_subject, t),
             )
             try:
@@ -510,7 +555,7 @@ async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]
             except ValidationError:
                 logger.warning("agent retry failed schema; falling back to legacy JSON")
                 raw = _invoke_legacy_chat_resolving_tpm(
-                    app_deps.groq_client,
+                    app_deps.chat_completion_client,
                     lambda t: _chat_prompt_tier(body, user_subject, t),
                 )
                 try:
@@ -541,7 +586,7 @@ async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]
         logger.exception("agent chat failed, falling back to legacy JSON chat")
         try:
             raw = _invoke_legacy_chat_resolving_tpm(
-                app_deps.groq_client,
+                app_deps.chat_completion_client,
                 lambda t: _chat_prompt_tier(body, user_subject, t),
             )
             try:
@@ -569,8 +614,11 @@ async def chat_with_coach(request: Request, body: ChatRequest) -> dict[str, Any]
 @limiter.limit(_COACH_RATE_LIMIT)
 async def recommend_routine(request: Request, body: RecommendRequest) -> dict[str, Any]:
     user_subject = resolve_request_subject(request, body.user_id)
-    if not app_deps.groq_client:
-        raise HTTPException(status_code=500, detail="서버에 Groq API 키가 없습니다.")
+    if not app_deps.chat_completion_client:
+        raise HTTPException(
+            status_code=500,
+            detail="LLM 이 설정되지 않았습니다. GROQ_API_KEY 또는 OPENAI_COMPAT_BASE_URL 을 확인하세요.",
+        )
 
     emergency_cap = _emergency_completion_cap()
     chat_completion: Any = None
@@ -580,20 +628,23 @@ async def recommend_routine(request: Request, body: RecommendRequest) -> dict[st
             messages = _recommend_messages(body, user_subject, tier)
             mt = emergency_cap if tier == 2 else None
 
-            def _groq_call(
+            def _llm_call(
                 m: list[dict[str, str]] = messages, tok: int | None = mt
             ) -> Any:
-                return _groq_chat_completion_create(
-                    app_deps.groq_client, m, max_completion_tokens=tok
+                return chat_completion_create(
+                    app_deps.chat_completion_client,
+                    m,
+                    provider=app_deps.llm_chat_provider,
+                    max_completion_tokens=tok,
                 )
 
             try:
                 chat_completion = await asyncio.wait_for(
-                    asyncio.to_thread(_groq_call),
+                    asyncio.to_thread(_llm_call),
                     timeout=_coach_timeout_sec(),
                 )
                 break
-            except APIError as e:
+            except Exception as e:
                 if not _is_groq_tpm_rate_limit(e):
                     raise
                 if tier == 2:

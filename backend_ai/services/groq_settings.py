@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 
 _DEFAULT_MODEL = "llama-3.1-8b-instant"
-_DEFAULT_MAX_COMPLETION = 1024
+# Groq on_demand 는 요청당 TPM 한도가 낮아, 입력+출력 상한 합이 초과되기 쉽다.
+_DEFAULT_MAX_COMPLETION = 512
 _MIN_MAX_COMPLETION = 256
 
 

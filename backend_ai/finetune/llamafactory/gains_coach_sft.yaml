@@ -1,0 +1,46 @@
+# LLaMA-Factory 학습 예시 — 경로·모델은 환경에 맞게 수정 후 사용.
+# 사용법: 이 파일과 dataset_info 항목을 LLaMA-Factory 저장소의 data/ 에 맞게 배치한 뒤
+#   llamafactory-cli train gains_coach_sft.yaml
+# (CLI 이름은 LLaMA-Factory 버전별로 다를 수 있음 — 공식 문서 확인)
+
+### model
+model_name_or_path: meta-llama/Llama-3.2-3B-Instruct
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 16
+lora_target: all
+
+### dataset
+dataset: gains_coach_sft
+template: llama3
+cutoff_len: 4096
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### output
+output_dir: saves/gains-coach-lora
+logging_steps: 10
+save_steps: 100
+plot_loss: true
+overwrite_output_dir: true
+save_only_model: false
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 4
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000
+
+### eval (optional)
+# val_size: 0.05
+# per_device_eval_batch_size: 1
+# eval_strategy: steps
+# eval_steps: 100

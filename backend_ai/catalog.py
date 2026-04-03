@@ -18,7 +18,7 @@ KO_TO_EN: dict[str, str] = {}
 EXERCISE_NAME_ALIASES: dict[str, str] = {}
 EXERCISE_NAME_EN_TO_KO: dict[str, str] = {}
 exercise_catalog_text: str = ""
-EXERCISE_CATALOG_MAX_PER_MUSCLE: int = 12
+EXERCISE_CATALOG_MAX_PER_MUSCLE: int = 8
 
 _CATALOG_LOADED: bool = False
 
@@ -34,12 +34,12 @@ def load_catalog(base_dir: str) -> None:
     exercise_name_aliases_path = os.path.join(base_dir, "exercise_name_aliases.json")
 
     _EXERCISE_CATALOG_MAX_PER_MUSCLE_RAW = os.getenv(
-        "EXERCISE_CATALOG_MAX_PER_MUSCLE", "12"
+        "EXERCISE_CATALOG_MAX_PER_MUSCLE", "8"
     )
     try:
         EXERCISE_CATALOG_MAX_PER_MUSCLE = int(_EXERCISE_CATALOG_MAX_PER_MUSCLE_RAW)
     except ValueError:
-        EXERCISE_CATALOG_MAX_PER_MUSCLE = 12
+        EXERCISE_CATALOG_MAX_PER_MUSCLE = 8
 
     exercise_catalog_text = ""
     try:
