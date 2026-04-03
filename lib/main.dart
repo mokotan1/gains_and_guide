@@ -158,18 +158,23 @@ class _MainScreenState extends State<MainScreen> {
         index: _selectedIndex,
         children: _screens,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        backgroundColor: Colors.white,
-        selectedItemColor: AppTheme.primaryBlue,
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
-          BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: '루틴'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: '프로필'),
-        ],
+      bottomNavigationBar: SafeArea(
+        top: false,
+        left: false,
+        right: false,
+        child: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: (index) => setState(() => _selectedIndex = index),
+          backgroundColor: Colors.white,
+          selectedItemColor: AppTheme.primaryBlue,
+          unselectedItemColor: Colors.grey,
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
+            BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: '루틴'),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: '프로필'),
+          ],
+        ),
       ),
     );
   }

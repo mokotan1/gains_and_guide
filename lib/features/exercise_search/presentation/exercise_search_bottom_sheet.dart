@@ -34,34 +34,38 @@ class ExerciseSearchBottomSheet extends ConsumerWidget {
       minChildSize: 0.5,
       maxChildSize: 0.95,
       builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              _buildDragHandle(),
-              const ExerciseSearchBar(),
-              QuickSelectChips(
-                onSelect: (name) => _showSetupDialog(context, ref, name),
-              ),
-              const SizedBox(height: 8),
-              const MuscleGroupTabs(),
-              const SizedBox(height: 8),
-              const EquipmentFilterChips(),
-              const SizedBox(height: 4),
-              const Divider(height: 1),
-              Expanded(
-                child: _ExerciseResultList(
-                  scrollController: scrollController,
-                  onSelectStrength: (exercise) =>
-                      _showSetupDialogFromCatalog(context, ref, exercise),
-                  onSelectCardioByName: (name) =>
-                      _showCardioSetupDialog(context, ref, name),
+        final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                _buildDragHandle(),
+                const ExerciseSearchBar(),
+                QuickSelectChips(
+                  onSelect: (name) => _showSetupDialog(context, ref, name),
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                const MuscleGroupTabs(),
+                const SizedBox(height: 8),
+                const EquipmentFilterChips(),
+                const SizedBox(height: 4),
+                const Divider(height: 1),
+                Expanded(
+                  child: _ExerciseResultList(
+                    scrollController: scrollController,
+                    onSelectStrength: (exercise) =>
+                        _showSetupDialogFromCatalog(context, ref, exercise),
+                    onSelectCardioByName: (name) =>
+                        _showCardioSetupDialog(context, ref, name),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
