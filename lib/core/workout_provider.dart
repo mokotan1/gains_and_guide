@@ -544,6 +544,8 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
       await _service.clearSession();
       isFinished = false;
+      // prefs 세션과 동기화: 이후 UI가 "진행 중 세션"으로 오인하지 않도록 비운다.
+      state = [];
     }
   }
 }

@@ -230,7 +230,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // --- 핵심 정산 및 분석 로직 ---
   Future<void> _processAiRecommendation(List<Exercise> currentExercises) async {
-    final hadCardio = currentExercises.any((e) => e.isCardio);
+    if (mounted) {
+      setState(() => _offerCardioCoachAfterSettle = false);
+    }
+    final hadCardioInSession = currentExercises.any((e) => e.isCardio);
     final isSlDay = SettlementCoach.isStrongliftsTemplateDay(currentExercises);
     final coachFocus = isSlDay
         ? SettlementCoach.focusStrongliftsWeights
@@ -239,6 +242,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _showLoadingDialog();
     try {
       await ref.read(workoutProvider.notifier).saveCurrentWorkoutToHistory();
+      final todayYmd = DateTime.now().toString().split(' ')[0];
+      final cardioToday = await ref
+          .read(cardioHistoryRepositoryProvider)
+          .getHistoryForDateRange(todayYmd, todayYmd);
+      final hasCardioRecorded =
+          hadCardioInSession || cardioToday.isNotEmpty;
+
       await _exportHistoryToCsv();
 
       final profileRepo = ref.read(bodyProfileRepositoryProvider);
@@ -250,7 +260,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
       final message = SettlementCoach.weightSettlementMessage(
         isStrongliftsDay: isSlDay,
-        hasCardioToday: hadCardio,
+        hasCardioToday: hasCardioRecorded,
         profilePrefix: pInfo,
       );
 
@@ -277,7 +287,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       ref.read(workoutProvider.notifier).finishWorkout();
       if (mounted) {
-        setState(() => _offerCardioCoachAfterSettle = hadCardio);
+        setState(() => _offerCardioCoachAfterSettle = hasCardioRecorded);
       }
       final rawReply = data['response'];
       final reply = rawReply is String ? rawReply.trim() : '';
@@ -691,6 +701,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isFinished = notifier.isFinished;
     final deloadRec = notifier.deloadRecommendation;
 
+    // 새 세션(미완료 + 운동 목록 있음)으로 돌아오면 유산소 버튼 플래그 초기화
     if (!isFinished && exercises.isNotEmpty && _offerCardioCoachAfterSettle) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
