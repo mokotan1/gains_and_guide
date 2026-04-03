@@ -37,6 +37,8 @@ class ChatRequest(BaseModel):
     user_id: str = ""
     message: str
     context: str = ""
+    # settlement split: stronglifts_weights | weights_minimal | cardio_only | "" (legacy full prompt)
+    coach_focus: str = ""
 
 
 class RecommendRequest(BaseModel):
@@ -125,6 +127,27 @@ def _rag_query_max_chars() -> int:
         return max(200, int(raw))
     except ValueError:
         return max(200, _DEFAULT_RAG_QUERY_CHARS)
+
+
+def _coach_focus_norm(body: ChatRequest) -> str:
+    return (body.coach_focus or "").strip().lower()
+
+
+def _tier_include_routine_guide(coach_focus: str, tier: int) -> bool:
+    """TPM 절약: 정산 분할 시 거대한 routine_generation_guide JSON 주입 생략."""
+    if tier >= 2:
+        return False
+    if coach_focus in ("stronglifts_weights", "weights_minimal", "cardio_only"):
+        return False
+    return True
+
+
+def _tier_include_catalog(coach_focus: str, tier: int) -> bool:
+    if tier >= 2:
+        return False
+    if coach_focus == "cardio_only":
+        return False
+    return True
 
 
 def _truncate_chat_request(body: ChatRequest) -> ChatRequest:
@@ -303,14 +326,17 @@ def _invoke_legacy_chat_resolving_tpm(
 def _chat_prompt_tier(
     body: ChatRequest, user_subject: str, tier: int
 ) -> tuple[str, str]:
+    focus = _coach_focus_norm(body)
+    irg = _tier_include_routine_guide(focus, tier)
+    icat = _tier_include_catalog(focus, tier)
     if tier == 0:
         system_prompt = _build_chat_system_base(
             body.message,
             user_subject,
             rag_snippet_max=None,
             skip_rag=False,
-            include_routine_guide=True,
-            include_catalog=True,
+            include_routine_guide=irg,
+            include_catalog=icat,
             catalog_max_chars=_catalog_injection_max_chars(0),
             chat_context=body.context,
         )
@@ -321,8 +347,8 @@ def _chat_prompt_tier(
             user_subject,
             rag_snippet_max=_COMPACT_RAG_SNIPPET_CHARS,
             skip_rag=False,
-            include_routine_guide=True,
-            include_catalog=True,
+            include_routine_guide=irg,
+            include_catalog=icat,
             catalog_max_chars=_catalog_injection_max_chars(1),
             chat_context=body.context,
         )

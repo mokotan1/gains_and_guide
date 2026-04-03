@@ -16,6 +16,7 @@ import '../../routine/domain/exercise.dart';
 import '../../routine/application/workout_service.dart';
 import '../../weekly_report/application/weekly_report_service.dart';
 import '../../weekly_report/presentation/weekly_report_screen.dart';
+import '../domain/settlement_coach.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -29,6 +30,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _remainingSeconds = 0;
   int _selectedRestTime = 180;
   bool _weeklyReportReady = false;
+  /// 웨이트 정산 직후, 오늘 유산소가 있으면 별도 `/chat` 을 안내한다.
+  bool _offerCardioCoachAfterSettle = false;
 
   @override
   void initState() {
@@ -130,7 +133,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // --- CSV 데이터 생성 로직 ---
-  Future<String> _generateWorkoutCsv(List<Exercise> currentExercises) async {
+  /// [excludeCardioToday]: 오늘 행만 유산소 제외(과거 기록은 workout_history 만 사용).
+  Future<String> _generateWorkoutCsv(
+    List<Exercise> currentExercises, {
+    bool excludeCardioToday = false,
+  }) async {
     String csv = "date,name,weight,sets,reps,rpe_list,total_volume,avg_rpe\n";
     final historyRepo = ref.read(workoutHistoryRepositoryProvider);
     final history = await historyRepo.getAllHistory();
@@ -161,6 +168,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     String today = DateTime.now().toString().split(' ')[0];
     if (!grouped.containsKey(today)) {
       for (var ex in currentExercises) {
+        if (excludeCardioToday && ex.isCardio) continue;
         final completedEntries = ex.setRpe.asMap().entries
             .where((entry) => ex.setStatus[entry.key])
             .toList();
@@ -221,7 +229,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // --- 핵심 정산 및 분석 로직 ---
-  void _processAiRecommendation(List<Exercise> currentExercises) async {
+  Future<void> _processAiRecommendation(List<Exercise> currentExercises) async {
+    final hadCardio = currentExercises.any((e) => e.isCardio);
+    final isSlDay = SettlementCoach.isStrongliftsTemplateDay(currentExercises);
+    final coachFocus = isSlDay
+        ? SettlementCoach.focusStrongliftsWeights
+        : SettlementCoach.focusWeightsMinimal;
+
     _showLoadingDialog();
     try {
       await ref.read(workoutProvider.notifier).saveCurrentWorkoutToHistory();
@@ -230,7 +244,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final profileRepo = ref.read(bodyProfileRepositoryProvider);
       final profile = await profileRepo.getProfile();
       String pInfo = profile != null ? "사용자 체중: ${profile['weight']}kg. " : "";
-      String fullCsv = await _generateWorkoutCsv(currentExercises);
+      final weightCsv = await _generateWorkoutCsv(
+        currentExercises,
+        excludeCardioToday: true,
+      );
+      final message = SettlementCoach.weightSettlementMessage(
+        isStrongliftsDay: isSlDay,
+        hasCardioToday: hadCardio,
+        profilePrefix: pInfo,
+      );
 
       final ApiClient apiClient = ref.read(apiClientProvider);
       final identity = ref.read(userIdentityProvider);
@@ -239,8 +261,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         '/chat',
         {
           'user_id': identity.userId,
-          'message': '$pInfo 오늘 운동 기록을 분석하고 증량 가이드 데이터를 포함해서 줘.',
-          'context': fullCsv,
+          'message': message,
+          'context': weightCsv,
+          'coach_focus': coachFocus,
         },
         timeout: const Duration(seconds: 60),
       );
@@ -253,6 +276,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
 
       ref.read(workoutProvider.notifier).finishWorkout();
+      if (mounted) {
+        setState(() => _offerCardioCoachAfterSettle = hadCardio);
+      }
       final rawReply = data['response'];
       final reply = rawReply is String ? rawReply.trim() : '';
       _showAiResultDialog(
@@ -275,6 +301,72 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('정산 중 오류가 발생했습니다. 다시 시도해 주세요.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _runCardioOnlyCoach() async {
+    final today = DateTime.now().toString().split(' ')[0];
+    final cardioRepo = ref.read(cardioHistoryRepositoryProvider);
+    final contextText =
+        await SettlementCoach.buildCardioCoachContext(
+      cardioRepo: cardioRepo,
+      dateYmd: today,
+    );
+    if (!mounted) return;
+    if (contextText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('오늘 저장된 유산소 기록이 없습니다.')),
+      );
+      return;
+    }
+
+    final profileRepo = ref.read(bodyProfileRepositoryProvider);
+    final profile = await profileRepo.getProfile();
+    final pInfo =
+        profile != null ? "사용자 체중: ${profile['weight']}kg. " : "";
+
+    _showLoadingDialog();
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final identity = ref.read(userIdentityProvider);
+      final data = await apiClient.post(
+        '/chat',
+        {
+          'user_id': identity.userId,
+          'message':
+              SettlementCoach.cardioOnlyMessage(profilePrefix: pInfo),
+          'context': contextText,
+          'coach_focus': SettlementCoach.focusCardioOnly,
+        },
+        timeout: const Duration(seconds: 60),
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      if (mounted) {
+        setState(() => _offerCardioCoachAfterSettle = false);
+      }
+      final rawReply = data['response'];
+      final reply = rawReply is String ? rawReply.trim() : '';
+      _showAiResultDialog(
+        reply.isNotEmpty ? reply : '유산소 분석을 받았습니다.',
+      );
+    } on AppException catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.userMessage), backgroundColor: Colors.red),
+        );
+      }
+    } catch (_) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('유산소 분석 중 오류가 발생했습니다.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -598,6 +690,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final notifier = ref.watch(workoutProvider.notifier);
     final isFinished = notifier.isFinished;
     final deloadRec = notifier.deloadRecommendation;
+
+    if (!isFinished && exercises.isNotEmpty && _offerCardioCoachAfterSettle) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => _offerCardioCoachAfterSettle = false);
+        }
+      });
+    }
 
     int totalSets = 0, completedSets = 0;
     for (var ex in exercises) {
@@ -1037,11 +1137,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(16)),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.check_circle, color: AppTheme.successGreen, size: 48),
-          SizedBox(height: 8),
-          Text('오운완! 오늘 운동 끝', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.successGreen)),
+          const Icon(Icons.check_circle, color: AppTheme.successGreen, size: 48),
+          const SizedBox(height: 8),
+          const Text(
+            '오운완! 오늘 운동 끝',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.successGreen,
+            ),
+          ),
+          if (_offerCardioCoachAfterSettle) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _runCardioOnlyCoach,
+                icon: const Icon(Icons.directions_run_outlined),
+                label: const Text('유산소만 AI 분석 받기'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
