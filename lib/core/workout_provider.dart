@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/deload/application/deload_service.dart';
 import '../features/routine/domain/exercise.dart';
+import '../features/routine/application/routine_flexibility.dart';
 import '../features/routine/application/workout_service.dart';
 import 'auth/user_identity.dart';
 import 'constants/cardio_source.dart';
@@ -21,6 +22,8 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   bool isFinished = false;
   DeloadRecommendation? deloadRecommendation;
   final Map<int, List<Exercise>> _currentWeeklyRoutine = {};
+  /// 스트롱리프트 A/B: 직전 세션을 그대로 반복할지(한 번만 적용 후 해제)
+  bool _strongliftsRepeatLastSession = false;
 
   Future<void> _loadAllData() async {
     _currentWeeklyRoutine.addAll(await _service.loadWeeklyProgram());
@@ -259,7 +262,10 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
 
     // [수정 1] 백 스쿼트가 포함된 루틴이라면, 요일 무시하고 이전 운동 기록을 기반으로 A/B 코스 결정
     if (routine.isNotEmpty && routine.any((e) => e.name == '백 스쿼트')) {
-      routine = await _getSmartStrongliftsRoutine(routine);
+      routine = await _getSmartStrongliftsRoutine(
+        routine,
+        repeatLastSession: _strongliftsRepeatLastSession,
+      );
     }
 
     if (routine.isNotEmpty) {
@@ -311,6 +317,54 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     _saveCurrentSession();
   }
 
+  static bool _isStrongliftsTemplateDay(List<Exercise>? dayRoutine) =>
+      dayRoutine != null &&
+      dayRoutine.isNotEmpty &&
+      dayRoutine.any((e) => e.name == '백 스쿼트');
+
+  String _todayYmd() => DateTime.now().toString().split(' ').first;
+
+  /// 직장인 주 N회 등: 예정일이 여러 번 비어 A/B가 애매해질 때 안내 다이얼로그 표시 권장 여부
+  Future<bool> shouldOfferRoutineFlexDialog() async {
+    final weekday = DateTime.now().weekday;
+    final todayList = _currentWeeklyRoutine[weekday];
+    if (!_isStrongliftsTemplateDay(todayList)) return false;
+
+    if (await _service.getRoutineFlexPromptDate() == _todayYmd()) {
+      return false;
+    }
+
+    final last = await _service.getLatestWorkoutHistoryDate();
+    if (last == null) return false;
+
+    final lastNorm = DateTime(last.year, last.month, last.day);
+    final now = DateTime.now();
+    final todayNorm = DateTime(now.year, now.month, now.day);
+
+    final scheduled = _currentWeeklyRoutine.entries
+        .where((e) => e.value.isNotEmpty)
+        .map((e) => e.key)
+        .toSet();
+    if (scheduled.isEmpty) return false;
+
+    return shouldSuggestRoutineFlexibility(
+      latestHistoryDay: lastNorm,
+      today: todayNorm,
+      scheduledWeekdays: scheduled,
+    );
+  }
+
+  Future<void> markRoutineFlexPromptShown() async {
+    await _service.setRoutineFlexPromptDate(_todayYmd());
+  }
+
+  /// [repeatLastSession]: true면 마지막으로 기록된 A/B와 **같은** 메인 루틴
+  Future<void> applyRoutineFlexChoice({required bool repeatLastSession}) async {
+    _strongliftsRepeatLastSession = repeatLastSession;
+    await updateRoutineByDay();
+    _strongliftsRepeatLastSession = false;
+  }
+
   /// A/B 양쪽 메인 운동 이름 (보조 운동 필터링에 사용)
   static final Set<String> _allStrongliftsMainNames = {
     ...WorkoutConstants.strongliftsMainA,
@@ -321,7 +375,10 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
   /// - workout_history는 date DESC로 조회되므로 첫 행이 가장 최근 날짜
   /// - 날짜는 항상 YYYY-MM-DD로 정규화해 비교 (DB/시간대 차이 대비)
   /// - A-key(벤치) 또는 B-key(OHP) 외에 데드리프트도 B 판별에 사용
-  Future<List<Exercise>> _getSmartStrongliftsRoutine(List<Exercise> defaultRoutine) async {
+  Future<List<Exercise>> _getSmartStrongliftsRoutine(
+    List<Exercise> defaultRoutine, {
+    bool repeatLastSession = false,
+  }) async {
     final history = await _service.getAllHistory();
     if (history.isEmpty) return defaultRoutine;
 
@@ -350,6 +407,16 @@ class WorkoutNotifier extends StateNotifier<List<Exercise>> {
     final bool lastWasB = lastExercises.any(
         (e) => WorkoutConstants.strongliftsRoutineBKeys.contains(e) ||
                e == '컨벤셔널 데드리프트');
+
+    if (repeatLastSession) {
+      if (lastWasA && !lastWasB) {
+        return _mergeWithAccessories(routineA, defaultRoutine);
+      }
+      if (lastWasB && !lastWasA) {
+        return _mergeWithAccessories(routineB, defaultRoutine);
+      }
+      return defaultRoutine;
+    }
 
     if (lastWasA && !lastWasB) {
       return _mergeWithAccessories(routineB, defaultRoutine);

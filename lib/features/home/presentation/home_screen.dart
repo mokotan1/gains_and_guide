@@ -13,6 +13,7 @@ import '../../exercise_search/presentation/exercise_search_bottom_sheet.dart';
 import '../../deload/presentation/deload_banner_widget.dart';
 import '../../deload/presentation/deload_prediction_card.dart';
 import '../../routine/domain/exercise.dart';
+import '../../routine/application/workout_service.dart';
 import '../../weekly_report/application/weekly_report_service.dart';
 import '../../weekly_report/presentation/weekly_report_screen.dart';
 
@@ -33,6 +34,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     _checkWeeklyReport();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeOfferRoutineFlexibility());
+  }
+
+  /// 주 N회·직장인: 예정일이 여러 번 비어 간 뒤, 스트롱리프트 A/B를 어떻게 잡을지 확인
+  Future<void> _maybeOfferRoutineFlexibility() async {
+    if (!mounted) return;
+    final notifier = ref.read(workoutProvider.notifier);
+    try {
+      if (!await notifier.shouldOfferRoutineFlexDialog()) return;
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+
+    final last = await ref.read(workoutServiceProvider).getLatestWorkoutHistoryDate();
+    final lastLabel = last != null
+        ? '${last.year}-${last.month.toString().padLeft(2, '0')}-${last.day.toString().padLeft(2, '0')}'
+        : '';
+
+    if (!mounted) return;
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        title: const Text('루틴 여유'),
+        content: SingleChildScrollView(
+          child: Text(
+            lastLabel.isEmpty
+                ? '최근 운동 기록을 기준으로, 오늘 메인 루틴(A/B)을 어떻게 잡을지 선택해 주세요.\n\n'
+                    '주 3회만으로도 요일을 빡빡하게 맞추기 어려울 수 있어요. '
+                    '앱은 마지막으로 저장한 운동 날을 기준으로 자동 교대하지만, '
+                    '직전에 못 들어간 세션이 있었다면 같은 메인을 다시 잡을 수도 있어요.'
+                : '마지막 기록일은 $lastLabel 입니다. 그 사이에 정해 두신 운동 요일이 여러 번 지난 것으로 보여요.\n\n'
+                    '직장인 주 3회는 매 요일을 채우기 어려울 수 있으니, 오늘만 어떻게 진행할지 골라 주세요.\n\n'
+                    '• 이어서: 마지막 기록 기준으로 다음 A/B(기본)\n'
+                    '• 직전과 동일: 마지막에 하신 A 또는 B 메인을 한 번 더',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'later'),
+            child: const Text('나중에'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'repeat'),
+            child: const Text('직전과 동일'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 'continue'),
+            child: const Text('이어서'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (choice == 'repeat') {
+      await notifier.applyRoutineFlexChoice(repeatLastSession: true);
+    } else if (choice == 'continue') {
+      await notifier.applyRoutineFlexChoice(repeatLastSession: false);
+    }
+    await notifier.markRoutineFlexPromptShown();
+    if (mounted) setState(() {});
   }
 
   @override

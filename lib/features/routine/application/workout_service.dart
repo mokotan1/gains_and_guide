@@ -24,6 +24,7 @@ class WorkoutService {
 
   static const String _sessionKey = 'current_workout_session';
   static const String _lastDateKey = 'last_session_date';
+  static const String _routineFlexPromptKey = 'routine_flex_prompt_date';
 
   // ---------------------------------------------------------------------------
   // Weekly program (SQLite)
@@ -129,6 +130,27 @@ class WorkoutService {
 
   Future<List<Map<String, dynamic>>> getAllHistory() =>
       _historyRepo.getAllHistory();
+
+  /// 가장 최근 운동 기록 날짜(로컬 자정 기준). 없으면 null.
+  Future<DateTime?> getLatestWorkoutHistoryDate() async {
+    final h = await _historyRepo.getAllHistory();
+    if (h.isEmpty) return null;
+    final raw = h.first['date'];
+    if (raw == null) return null;
+    final s = raw.toString().trim().split(' ').first;
+    if (s.length < 10) return null;
+    return DateTime.tryParse(s.substring(0, 10));
+  }
+
+  Future<String?> getRoutineFlexPromptDate() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_routineFlexPromptKey);
+  }
+
+  Future<void> setRoutineFlexPromptDate(String ymd) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_routineFlexPromptKey, ymd);
+  }
 }
 
 final workoutServiceProvider = Provider<WorkoutService>((ref) {
