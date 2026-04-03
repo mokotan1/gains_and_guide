@@ -13,6 +13,60 @@ class ExerciseNameKo {
   static String reverse(String koreanName) =>
       _reverseMap[koreanName] ?? koreanName;
 
+  /// [progression_history] 조회용: 영문 카탈로그명·한글 표시명이 서로 달라도
+  /// 동일 운동으로 인식할 수 있도록 DB `name` 컬럼과 비교할 문자열 목록을 만든다.
+  static List<String> progressionLookupAliases(String name) {
+    final n = name.trim();
+    if (n.isEmpty) return const [];
+    final out = <String>{n};
+    final ko = _map[n];
+    if (ko != null && ko.isNotEmpty) out.add(ko);
+    final en = _reverseMap[n];
+    if (en != null && en.isNotEmpty) out.add(en);
+    _mergePresetCatalogAliases(n, out);
+    return out.toList();
+  }
+
+  /// [progression_history] 저장 시: 카탈로그 영문 키면 한글 표시명으로 통일해
+  /// 루틴(한글)과 운동 목록과 동일 키로 쌓이게 한다.
+  ///
+  /// 스트롱리프트 등 **프리셋 한글명**은 카탈로그에 있는 공식 한글 표기로 정규화한다.
+  static String canonicalProgressionName(String name) {
+    final n = name.trim();
+    if (n.isEmpty) return n;
+    final presetCatalogEn = _presetKoreanToCatalogEnglish[n];
+    if (presetCatalogEn != null) {
+      return _map[presetCatalogEn] ?? n;
+    }
+    return _map[n] ?? n;
+  }
+
+  /// 앱 루틴 프리셋(예: 스트롱리프트 A/B)에서 쓰는 한글 이름 → exercises.json 의 영문 `name`.
+  /// 카탈로그에 동일 이름이 없으면 가장 가까운 항목으로 연결한다.
+  static const Map<String, String> _presetKoreanToCatalogEnglish = {
+    '플랫 벤치 프레스': 'Barbell Bench Press - Medium Grip',
+    '펜들레이 로우': 'Bent Over Barbell Row',
+    '오버헤드 프레스 (OHP)': 'Standing Military Press',
+    '컨벤셔널 데드리프트': 'Barbell Deadlift',
+    '데드리프트': 'Barbell Deadlift',
+  };
+
+  static void _mergePresetCatalogAliases(String n, Set<String> out) {
+    for (final e in _presetKoreanToCatalogEnglish.entries) {
+      final presetKo = e.key;
+      final catalogEn = e.value;
+      final catalogKo = _map[catalogEn];
+      final matches = n == presetKo ||
+          n == catalogEn ||
+          (catalogKo != null && n == catalogKo);
+      if (matches) {
+        out.add(presetKo);
+        out.add(catalogEn);
+        if (catalogKo != null && catalogKo.isNotEmpty) out.add(catalogKo);
+      }
+    }
+  }
+
   static late final Map<String, String> _reverseMap = () {
     final reversed = <String, String>{};
     for (final entry in _map.entries) {

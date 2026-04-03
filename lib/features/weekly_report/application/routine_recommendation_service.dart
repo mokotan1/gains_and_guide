@@ -151,7 +151,7 @@ class RoutineRecommendationService {
           orElse: () => results.first,
         );
         normalized.add(RoutineExercise(
-          name: match.name,
+          name: ExerciseNameKo.get(match.name),
           sets: ex.sets,
           reps: ex.reps,
           weight: ex.weight,

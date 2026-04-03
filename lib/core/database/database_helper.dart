@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../../features/routine/domain/exercise_catalog.dart';
+import '../data/exercise_name_ko.dart';
 import '../domain/models/cardio_catalog.dart';
 
 class DatabaseHelper {
@@ -510,23 +511,32 @@ class DatabaseHelper {
   // 증량 기록 저장 및 최신 무게 가져오기
   Future<void> saveProgression(String name, double weight) async {
     final db = await instance.database;
+    final key = ExerciseNameKo.canonicalProgressionName(name);
     await db.insert('progression_history', {
-      'name': name,
+      'name': key,
       'weight': weight,
       'date': DateTime.now().toString().split(' ')[0], // YYYY-MM-DD 형식으로 통일
     });
   }
 
   Future<double?> getLatestWeight(String name) async {
+    final aliases = ExerciseNameKo.progressionLookupAliases(name);
+    if (aliases.isEmpty) return null;
     final db = await instance.database;
-    final res = await db.query(
-      'progression_history',
-      where: 'name = ?',
-      whereArgs: [name],
-      orderBy: 'date DESC',
-      limit: 1,
+    final placeholders = List.filled(aliases.length, '?').join(',');
+    final res = await db.rawQuery(
+      '''
+      SELECT weight FROM progression_history
+      WHERE name IN ($placeholders)
+      ORDER BY date DESC
+      LIMIT 1
+      ''',
+      aliases,
     );
-    return res.isNotEmpty ? res.first['weight'] as double : null;
+    if (res.isEmpty) return null;
+    final w = res.first['weight'];
+    if (w == null) return null;
+    return (w as num).toDouble();
   }
 
   // 운동 삭제
@@ -636,13 +646,18 @@ class DatabaseHelper {
     String exerciseName,
     int limit,
   ) async {
+    final aliases = ExerciseNameKo.progressionLookupAliases(exerciseName);
+    if (aliases.isEmpty) return [];
     final db = await instance.database;
-    return db.query(
-      'progression_history',
-      where: 'name = ?',
-      whereArgs: [exerciseName],
-      orderBy: 'date DESC',
-      limit: limit,
+    final placeholders = List.filled(aliases.length, '?').join(',');
+    return db.rawQuery(
+      '''
+      SELECT * FROM progression_history
+      WHERE name IN ($placeholders)
+      ORDER BY date DESC
+      LIMIT ?
+      ''',
+      [...aliases, limit],
     );
   }
 
