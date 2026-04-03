@@ -1,0 +1,21 @@
+---
+description: Superpowers MCP 또는 로컬 using-superpowers SKILL 필수 pre-flight (레포 공통)
+alwaysApply: true
+---
+
+# Superpowers 필수
+
+전역 규칙과 동일합니다. 이 레포를 클론한 환경에서도 **항상** 적용되도록 둡니다.
+
+## 절대 규칙
+
+코드·패치·실행 계획 전에:
+
+1. **Superpowers MCP**가 있으면 `using-superpowers` 스킬을 도구로 로드하고, 작업에 맞는 추가 스킬을 호출합니다.
+2. MCP가 없으면 **Read**로 로컬 `using-superpowers/SKILL.md`를 읽습니다. Windows 예:
+   - `%USERPROFILE%\.cursor\plugins\local\superpowers\skills\using-superpowers\SKILL.md`
+   - 또는 cache 경로의 `cursor-public\superpowers\...\skills\using-superpowers\SKILL.md`
+3. 둘 다 불가하면 사용자에게 MCP/플러그인 활성화를 안내하고, 생략하지 않습니다.
+
+다른 레포에도 동일 규칙을 넣으려면 사용자 폴더의 스크립트를 실행하세요:  
+`& "$env:USERPROFILE\.cursor\scripts\copy-superpowers-rule.ps1"`
