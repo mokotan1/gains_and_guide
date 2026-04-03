@@ -253,7 +253,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
 
       ref.read(workoutProvider.notifier).finishWorkout();
-      _showAiResultDialog(data['response']);
+      final rawReply = data['response'];
+      final reply = rawReply is String ? rawReply.trim() : '';
+      _showAiResultDialog(
+        reply.isNotEmpty
+            ? reply
+            : (data['progression'] != null
+                ? '증량 가이드가 반영되었습니다.'
+                : '운동 정산을 완료했습니다.'),
+      );
     } on AppException catch (e) {
       if (mounted) Navigator.pop(context);
       if (mounted) {

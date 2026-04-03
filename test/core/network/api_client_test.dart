@@ -56,6 +56,61 @@ void main() {
       );
     });
 
+    test('400 Bad Request 이어도 본문에 response 가 있으면 Map 반환', () async {
+      final mockHttp = http_testing.MockClient((_) async {
+        return http.Response(
+          jsonEncode({'response': '분석 완료', 'note': 'gateway quirk'}),
+          400,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final client = _createClient(mockHttp);
+      final result = await client.post('/chat', {'message': 'hello'});
+
+      expect(result['response'], '분석 완료');
+      expect(result['note'], 'gateway quirk');
+    });
+
+    test('400 + JSON 이지만 유효 페이로드 없음 → ServerException(400)', () async {
+      final mockHttp = http_testing.MockClient((_) async {
+        return http.Response(
+          jsonEncode({'error': 'invalid_payload', 'detail': 'bad'}),
+          400,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final client = _createClient(mockHttp);
+
+      expect(
+        () => client.post('/chat', {}),
+        throwsA(isA<ServerException>().having(
+          (e) => e.statusCode,
+          'statusCode',
+          400,
+        )),
+      );
+    });
+
+    test('422 + progression Map 이면 Map 반환', () async {
+      final mockHttp = http_testing.MockClient((_) async {
+        return http.Response(
+          jsonEncode({
+            'progression': {'bench': 2.5},
+          }),
+          422,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final client = _createClient(mockHttp);
+      final result = await client.post('/chat', {});
+
+      expect(result['progression'], isA<Map>());
+      expect((result['progression'] as Map)['bench'], 2.5);
+    });
+
     test('404 Not Found → ServerException(404) throw', () async {
       final mockHttp = http_testing.MockClient((_) async {
         return http.Response('Not Found', 404);

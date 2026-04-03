@@ -27,6 +27,10 @@ class ApiClient {
   ///
   /// [path] 는 base URL 이후의 경로 (예: `/chat`, `/recommend`).
   /// [timeout] 을 명시하지 않으면 [AppConfig.defaultTimeout] 을 사용한다.
+  ///
+  /// 일부 프록시·게이트웨이는 본문에 정상 JSON(코치 답변·progression 등)을 실은 채
+  /// HTTP 400 등 비정상 상태를 반환할 수 있다. 그 경우에도 본문이 유효한 AI 페이로드면
+  /// [ServerException] 대신 파싱된 Map 을 반환한다.
   Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> body, {
@@ -47,16 +51,22 @@ class ApiClient {
           )
           .timeout(timeout ?? _config.defaultTimeout);
 
-      if (response.statusCode != 200) {
-        throw ServerException(response.statusCode);
+      final ok = response.statusCode >= 200 && response.statusCode < 300;
+      if (ok) {
+        try {
+          return jsonDecode(utf8.decode(response.bodyBytes))
+              as Map<String, dynamic>;
+        } on FormatException catch (e) {
+          throw ParseException(cause: e);
+        }
       }
 
-      try {
-        return jsonDecode(utf8.decode(response.bodyBytes))
-            as Map<String, dynamic>;
-      } on FormatException catch (e) {
-        throw ParseException(cause: e);
+      final fallback = _tryDecodeJsonMap(response);
+      if (fallback != null && _jsonContainsUsableAiPayload(fallback)) {
+        return fallback;
       }
+
+      throw ServerException(response.statusCode);
     } on AppException {
       rethrow;
     } on SocketException catch (e) {
@@ -66,6 +76,28 @@ class ApiClient {
     } on http.ClientException catch (e) {
       throw NetworkException(cause: e);
     }
+  }
+
+  static Map<String, dynamic>? _tryDecodeJsonMap(http.Response response) {
+    if (response.bodyBytes.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } on FormatException {
+      return null;
+    }
+    return null;
+  }
+
+  /// 비정상 상태 코드 본문이라도 UI·서비스가 쓸 수 있는 필드가 있으면 true.
+  static bool _jsonContainsUsableAiPayload(Map<String, dynamic> json) {
+    final text = json['response'];
+    if (text is String && text.trim().isNotEmpty) return true;
+    if (json['progression'] is Map) return true;
+    final routine = json['routine'];
+    if (routine is Map && routine.isNotEmpty) return true;
+    return false;
   }
 
   void dispose() => _httpClient.close();
