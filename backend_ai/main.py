@@ -17,7 +17,9 @@ from rate_limits import limiter
 from services.groq_settings import groq_max_completion_tokens, groq_model_name
 from services.llm_completion import build_chat_completion_client
 from routers.auth import router as auth_router
+from routers.big3_competition import router as big3_competition_router
 from routers.coach import router as coach_router
+from routers.strength_competition import router as strength_competition_router
 from routers.memory import router as memory_router
 from services.rag import create_rag_service
 from state import app_deps
@@ -86,6 +88,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(coach_router)
 app.include_router(auth_router)
 app.include_router(memory_router)
+app.include_router(strength_competition_router)
+app.include_router(big3_competition_router)
 
 
 @app.get("/")

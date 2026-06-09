@@ -23,6 +23,83 @@ class ApiClient {
   })  : _httpClient = httpClient ?? http.Client(),
         _extraHeaders = extraHeaders;
 
+  /// JSON GET 요청을 보내고 파싱된 응답을 반환한다.
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Duration? timeout,
+  }) async {
+    final uri = Uri.parse('${_config.apiBaseUrl}$path');
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    final extra = _extraHeaders?.call();
+    if (extra != null) {
+      headers.addAll(extra);
+    }
+    try {
+      final response = await _httpClient
+          .get(uri, headers: headers)
+          .timeout(timeout ?? _config.defaultTimeout);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          return jsonDecode(utf8.decode(response.bodyBytes))
+              as Map<String, dynamic>;
+        } on FormatException catch (e) {
+          throw ParseException(cause: e);
+        }
+      }
+      throw ServerException(response.statusCode);
+    } on AppException {
+      rethrow;
+    } on SocketException catch (e) {
+      throw NetworkException(cause: e);
+    } on TimeoutException catch (e) {
+      throw ApiTimeoutException(cause: e);
+    } on http.ClientException catch (e) {
+      throw NetworkException(cause: e);
+    }
+  }
+
+  /// JSON PUT 요청을 보내고 파싱된 응답을 반환한다.
+  Future<Map<String, dynamic>> put(
+    String path,
+    Map<String, dynamic> body, {
+    Duration? timeout,
+  }) async {
+    final uri = Uri.parse('${_config.apiBaseUrl}$path');
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    final extra = _extraHeaders?.call();
+    if (extra != null) {
+      headers.addAll(extra);
+    }
+    try {
+      final response = await _httpClient
+          .put(
+            uri,
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(timeout ?? _config.defaultTimeout);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          return jsonDecode(utf8.decode(response.bodyBytes))
+              as Map<String, dynamic>;
+        } on FormatException catch (e) {
+          throw ParseException(cause: e);
+        }
+      }
+      throw ServerException(response.statusCode);
+    } on AppException {
+      rethrow;
+    } on SocketException catch (e) {
+      throw NetworkException(cause: e);
+    } on TimeoutException catch (e) {
+      throw ApiTimeoutException(cause: e);
+    } on http.ClientException catch (e) {
+      throw NetworkException(cause: e);
+    }
+  }
+
   /// JSON POST 요청을 보내고 파싱된 응답을 반환한다.
   ///
   /// [path] 는 base URL 이후의 경로 (예: `/chat`, `/recommend`).

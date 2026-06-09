@@ -35,6 +35,24 @@ class WorkoutConstants {
     '컨벤셔널 데드리프트',
   ];
 
+  /// 3대 경쟁 canonical lift types (서버 API와 동일)
+  static const String big3Squat = 'squat';
+  static const String big3Bench = 'bench';
+  static const String big3Deadlift = 'deadlift';
+
+  static const List<String> big3LiftTypes = [
+    big3Squat,
+    big3Bench,
+    big3Deadlift,
+  ];
+
+  /// 3대 경쟁 ↔ 앱 운동명 매핑
+  static const Map<String, String> big3LiftKoLabels = {
+    big3Squat: '백 스쿼트',
+    big3Bench: '플랫 벤치 프레스',
+    big3Deadlift: '컨벤셔널 데드리프트',
+  };
+
   /// AI 추천 교체 시 유지할 코어 운동 이름
   static const List<String> coreExerciseNamesToKeep = [
     '백 스쿼트',

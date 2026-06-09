@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/repository_providers.dart';
+import '../../big3_competition/presentation/big3_competition_screen.dart';
 import 'workout_history_screen.dart';
 
 class BodyProfileScreen extends ConsumerStatefulWidget {
@@ -75,6 +76,20 @@ class _BodyProfileScreenState extends ConsumerState<BodyProfileScreen> {
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.emoji_events_outlined, color: Colors.black54),
+            title: const Text('3대 경쟁'),
+            subtitle: const Text('스쿼트·벤치·데드 시즌 리더보드 (opt-in)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const Big3CompetitionScreen(),
+                ),
+              );
+            },
+          ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.history, color: Colors.black54),
