@@ -1,13 +1,7 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_background/flutter_background.dart';
-import 'package:gains_and_guide/core/auth/auth_session.dart';
-import 'package:gains_and_guide/core/bootstrap/database_bootstrap.dart';
-import 'package:gains_and_guide/core/bootstrap/health_foreground_sync.dart';
-import 'package:gains_and_guide/core/config/app_config.dart';
-import 'package:gains_and_guide/core/database/database_helper.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gains_and_guide/core/bootstrap/app_initializer.dart';
+import 'package:gains_and_guide/core/bootstrap/startup_screen.dart';
 import 'package:gains_and_guide/core/theme/app_theme.dart';
 import 'package:gains_and_guide/features/home/presentation/body_profile_screen.dart';
 import 'package:gains_and_guide/features/home/presentation/home_screen.dart';
@@ -15,34 +9,8 @@ import 'package:gains_and_guide/features/onboarding/presentation/onboarding_scre
 import 'package:gains_and_guide/features/onboarding/presentation/providers/onboarding_providers.dart';
 import 'package:gains_and_guide/features/routine/presentation/program_selection_screen.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await DatabaseBootstrap.run(DatabaseHelper.instance);
-
-  final appConfig = AppConfig.fromEnvironment();
-  if (appConfig.supabaseConfigured) {
-    await Supabase.initialize(
-      url: appConfig.supabaseUrl,
-      anonKey: appConfig.supabaseAnonKey,
-    );
-  }
-  await AuthSession.instance.initialize(appConfig);
-
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    final androidConfig = FlutterBackgroundAndroidConfig(
-      notificationTitle: "Gains & Guide",
-      notificationText: "운동 타이머가 백그라운드에서 실행 중입니다.",
-      notificationImportance: AndroidNotificationImportance.normal,
-      notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
-    );
-
-    final ok = await FlutterBackground.initialize(androidConfig: androidConfig);
-    if (ok) {
-      await FlutterBackground.enableBackgroundExecution();
-    }
-  }
-
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -56,7 +24,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.light,
       theme: AppTheme.lightTheme,
-      home: const HealthForegroundSync(child: AppEntryPoint()),
+      home: const AppInitializer(app: AppEntryPoint()),
     );
   }
 }
@@ -87,50 +55,8 @@ class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
       data: (completed) => completed
           ? const MainScreen()
           : OnboardingScreen(onComplete: _handleOnboardingComplete),
-      loading: () => const _SplashScreen(),
+      loading: () => const AppLoadingSplash(),
       error: (_, __) => const MainScreen(),
-    );
-  }
-}
-
-class _SplashScreen extends StatelessWidget {
-  const _SplashScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.primaryBlue,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.fitness_center,
-              size: 64,
-              color: Colors.white,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Gains & Guide',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 24),
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
