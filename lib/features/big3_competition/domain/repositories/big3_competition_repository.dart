@@ -2,6 +2,7 @@ import '../models/big3_stats.dart';
 import '../models/competition_profile.dart';
 import '../models/competition_season.dart';
 import '../models/leaderboard_entry.dart';
+import '../models/rank_summary.dart';
 
 abstract class Big3CompetitionRepository {
   Future<CompetitionSeason?> fetchCurrentSeason();
@@ -27,4 +28,6 @@ abstract class Big3CompetitionRepository {
     int limit = 50,
     int offset = 0,
   });
+
+  Future<RankSummary> fetchMyRank({String? seasonId});
 }

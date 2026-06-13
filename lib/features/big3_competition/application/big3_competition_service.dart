@@ -3,6 +3,7 @@ import '../domain/models/big3_stats.dart';
 import '../domain/models/competition_profile.dart';
 import '../domain/models/competition_season.dart';
 import '../domain/models/leaderboard_entry.dart';
+import '../domain/models/rank_summary.dart';
 import '../domain/repositories/big3_competition_repository.dart';
 
 class Big3CompetitionService {
@@ -51,4 +52,7 @@ class Big3CompetitionService {
     int limit = 50,
   }) =>
       _repository.fetchLeaderboard(seasonId: seasonId, limit: limit);
+
+  Future<RankSummary> myRank({String? seasonId}) =>
+      _repository.fetchMyRank(seasonId: seasonId);
 }

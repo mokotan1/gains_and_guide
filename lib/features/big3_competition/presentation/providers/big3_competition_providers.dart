@@ -7,6 +7,7 @@ import '../../domain/models/big3_stats.dart';
 import '../../domain/models/competition_profile.dart';
 import '../../domain/models/competition_season.dart';
 import '../../domain/models/leaderboard_entry.dart';
+import '../../domain/models/rank_summary.dart';
 import '../../domain/repositories/big3_competition_repository.dart';
 
 final big3CompetitionRepositoryProvider = Provider<Big3CompetitionRepository>((ref) {
@@ -37,4 +38,11 @@ final big3LeaderboardProvider = FutureProvider<List<LeaderboardEntry>>((ref) asy
   return ref
       .watch(big3CompetitionServiceProvider)
       .leaderboard(seasonId: season?.id);
+});
+
+final big3MyRankProvider = FutureProvider<RankSummary>((ref) async {
+  final season = await ref.watch(big3CurrentSeasonProvider.future);
+  return ref
+      .watch(big3CompetitionServiceProvider)
+      .myRank(seasonId: season?.id);
 });

@@ -11,6 +11,9 @@ class Big3Stats {
   final double? deadlift1rmKg;
   final double? total1rmKg;
 
+  bool get isComplete =>
+      squat1rmKg != null && bench1rmKg != null && deadlift1rmKg != null;
+
   factory Big3Stats.fromBestsMap(Map<String, dynamic> bests, {double? total}) {
     double? read(String key) {
       final v = bests[key];

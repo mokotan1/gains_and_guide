@@ -78,9 +78,9 @@ class _BodyProfileScreenState extends ConsumerState<BodyProfileScreen> {
         child: Column(children: [
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.emoji_events_outlined, color: Colors.black54),
-            title: const Text('3대 경쟁'),
-            subtitle: const Text('스쿼트·벤치·데드 시즌 리더보드 (opt-in)'),
+            leading: const Icon(Icons.timeline_outlined, color: Colors.black54),
+            title: const Text('시즌 3대 기록'),
+            subtitle: const Text('스쿼트·벤치·데드 시즌별 최고 기록'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(

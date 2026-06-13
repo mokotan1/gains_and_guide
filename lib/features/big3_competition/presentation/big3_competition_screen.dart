@@ -52,15 +52,31 @@ class _Big3CompetitionScreenState extends ConsumerState<Big3CompetitionScreen>
     ref.invalidate(big3MyProfileProvider);
     ref.invalidate(big3MyStatsProvider);
     ref.invalidate(big3LeaderboardProvider);
+    ref.invalidate(big3MyRankProvider);
   }
 
   String _friendlyError(Object error) {
     if (error is ServerException) {
+      final message = error.message.toLowerCase();
       if (error.statusCode == 503) {
         return '서버 DB가 설정되지 않았습니다. DATABASE_URL을 확인해 주세요.';
       }
       if (error.statusCode == 401) {
-        return '로그인(익명 토큰)이 필요합니다.';
+        return '로그인이 필요합니다.';
+      }
+      if (error.statusCode == 409) {
+        return '이미 사용 중인 닉네임이에요.';
+      }
+      if (error.statusCode == 400 &&
+          message.contains('improvement exceeds safe weekly limit')) {
+        return '이전 기록 대비 변화가 커서 저장되지 않았어요. 무게와 반복을 다시 확인해 주세요.';
+      }
+      if (error.statusCode == 400 &&
+          message.contains('maximum 3 submissions')) {
+        return '오늘은 이 종목 기록을 3회까지 제출할 수 있어요.';
+      }
+      if (error.statusCode == 400 && message.contains('opt-in required')) {
+        return '시즌 참가 후 기록을 제출할 수 있어요.';
       }
       return '서버 오류 (${error.statusCode})';
     }
@@ -89,10 +105,11 @@ class _Big3CompetitionScreenState extends ConsumerState<Big3CompetitionScreen>
   Widget build(BuildContext context) {
     final seasonAsync = ref.watch(big3CurrentSeasonProvider);
     final profileAsync = ref.watch(big3MyProfileProvider);
+    final rankAsync = ref.watch(big3MyRankProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('3대 경쟁'),
+        title: const Text('시즌 3대 기록'),
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppTheme.primaryBlue,
@@ -153,10 +170,12 @@ class _Big3CompetitionScreenState extends ConsumerState<Big3CompetitionScreen>
                   _weightControllers[liftType]!.clear();
                 }),
                 statsAsync: ref.watch(big3MyStatsProvider),
+                rankAsync: rankAsync,
               ),
               _LeaderboardTab(
                 entriesAsync: ref.watch(big3LeaderboardProvider),
                 friendlyError: _friendlyError,
+                rankAsync: rankAsync,
               ),
             ],
           );
@@ -179,6 +198,7 @@ class _MyRecordsTab extends StatelessWidget {
     required this.onLeaderboardVisibilityChanged,
     required this.onSubmit,
     required this.statsAsync,
+    required this.rankAsync,
   });
 
   final String seasonName;
@@ -192,6 +212,7 @@ class _MyRecordsTab extends StatelessWidget {
   final void Function(bool visible) onLeaderboardVisibilityChanged;
   final void Function(String liftType) onSubmit;
   final AsyncValue<dynamic> statsAsync;
+  final AsyncValue<dynamic> rankAsync;
 
   @override
   Widget build(BuildContext context) {
@@ -215,6 +236,8 @@ class _MyRecordsTab extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         _StatsCard(statsAsync: statsAsync),
+        const SizedBox(height: 16),
+        _RankSummaryCard(rankAsync: rankAsync),
         const SizedBox(height: 16),
         ...WorkoutConstants.big3LiftTypes.map(
           (lift) => _SubmitCard(
@@ -263,7 +286,7 @@ class _OptInCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  optedIn ? '참가 중' : '미참가 (opt-in 필요)',
+                  optedIn ? '시즌 참가 중' : '이번 시즌 기록을 남기려면 참가가 필요해요',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 if (optedIn && profile != null) ...[
@@ -304,7 +327,7 @@ class _OptInCard extends StatelessWidget {
                 else
                   FilledButton(
                     onPressed: busy ? null : onOptIn,
-                    child: const Text('경쟁 참가하기'),
+                    child: const Text('시즌 참가하기'),
                   ),
               ],
             );
@@ -341,10 +364,46 @@ class _StatsCard extends StatelessWidget {
               Text('데드: ${_fmt(stats.deadlift1rmKg)}'),
               const Divider(),
               Text(
-                '3대 합산: ${_fmt(stats.total1rmKg)}',
+                '시즌 합산: ${_fmt(stats.total1rmKg)}',
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   color: AppTheme.primaryBlue,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RankSummaryCard extends StatelessWidget {
+  const _RankSummaryCard({required this.rankAsync});
+
+  final AsyncValue<dynamic> rankAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: rankAsync.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (e, _) => const Text('순위를 불러오지 못했습니다.'),
+          data: (rank) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '내 시즌 순위',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                rank.statusMessage,
+                style: TextStyle(
+                  color: rank.ranked ? AppTheme.primaryBlue : Colors.black54,
+                  fontWeight: rank.ranked ? FontWeight.w700 : FontWeight.w400,
                 ),
               ),
             ],
@@ -430,10 +489,12 @@ class _LeaderboardTab extends StatelessWidget {
   const _LeaderboardTab({
     required this.entriesAsync,
     required this.friendlyError,
+    required this.rankAsync,
   });
 
   final AsyncValue<dynamic> entriesAsync;
   final String Function(Object) friendlyError;
+  final AsyncValue<dynamic> rankAsync;
 
   @override
   Widget build(BuildContext context) {
@@ -446,37 +507,77 @@ class _LeaderboardTab extends StatelessWidget {
             child: Text('아직 완전한 3대 기록을 가진 참가자가 없습니다.'),
           );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: entries.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final e = entries[index];
-            return Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppTheme.primaryBlue,
-                  foregroundColor: Colors.white,
-                  child: Text('${e.rank}'),
-                ),
-                title: Text(e.displayAlias),
-                subtitle: Text(
-                  'S ${e.squat1rmKg.toStringAsFixed(1)} · '
-                  'B ${e.bench1rmKg.toStringAsFixed(1)} · '
-                  'D ${e.deadlift1rmKg.toStringAsFixed(1)}',
-                ),
-                trailing: Text(
-                  '${e.total1rmKg.toStringAsFixed(1)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
+        return Column(
+          children: [
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: entries.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final e = entries[index];
+                  return Card(
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppTheme.primaryBlue,
+                        foregroundColor: Colors.white,
+                        child: Text('${e.rank}'),
+                      ),
+                      title: Text(e.displayAlias),
+                      subtitle: Text(
+                        'S ${e.squat1rmKg.toStringAsFixed(1)} · '
+                        'B ${e.bench1rmKg.toStringAsFixed(1)} · '
+                        'D ${e.deadlift1rmKg.toStringAsFixed(1)}',
+                      ),
+                      trailing: Text(
+                        '${e.total1rmKg.toStringAsFixed(1)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+            _RankBottomBar(rankAsync: rankAsync),
+          ],
         );
       },
+    );
+  }
+}
+
+class _RankBottomBar extends StatelessWidget {
+  const _RankBottomBar({required this.rankAsync});
+
+  final AsyncValue<dynamic> rankAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          border: const Border(top: BorderSide(color: Color(0xFFE0E0E0))),
+        ),
+        child: rankAsync.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (e, _) => const Text('내 순위를 불러오지 못했습니다.'),
+          data: (rank) => Text(
+            rank.statusMessage,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: rank.ranked ? AppTheme.primaryBlue : Colors.black54,
+              fontWeight: rank.ranked ? FontWeight.w700 : FontWeight.w400,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
